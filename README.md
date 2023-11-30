@@ -44,9 +44,9 @@ web server (at 127.0.0.1:8080) that provides a web-based chatbot.
 
 | Model | Command-line binary | Server binary |
 | --- | --- | --- |
-| Mistral-7B-Instruct | [mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile (4.4 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile (4.4 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
-| LLaVA 1.5 | (Not provided because this model's features are best utilized via the web UI) | **[llava-v1.5-7b-q4-server.llamafile (4.3 GB)](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
-| WizardCoder-Python-13B | [wizardcoder-python-13b-main.llamafile (7.9 GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile (7.9GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
+| Mistral-7B-Instruct | [mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
+| LLaVA 1.5 | (Not provided because this model's features are best utilized via the web UI) | **[llava-v1.5-7b-q4-server.llamafile (3.97 GB)](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
+| WizardCoder-Python-13B | [wizardcoder-python-13b-main.llamafile (7.33 GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile (7.33GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
 
 You can also also download *just* the llamafile software (without any
 weights included) from our releases page, or directly in your terminal
@@ -79,6 +79,7 @@ that by installing the actually portable executable interpreter.
 
 ```sh
 sudo wget -O /usr/bin/ape https://cosmo.zip/pub/cosmos/bin/ape-$(uname -m).elf
+sudo chmod +x /usr/bin/ape
 sudo sh -c "echo ':APE:M::MZqFpD::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register"
 sudo sh -c "echo ':APE-jart:M::jartsr::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register"
 ```
@@ -298,7 +299,7 @@ the
 program that comes included with the `cosmocc` compiler. What the
 `assimilate` program does is turn the shell script executable into
 the host platform's native executable format. This guarantees a fallback
-path exists for traditonal release processes when it's needed.
+path exists for traditional release processes when it's needed.
 
 ### GPU Support
 
