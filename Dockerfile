@@ -1,7 +1,7 @@
 FROM ubuntu:latest
 RUN apt update && \
     apt add --no-cache \
-        build-base=0.5-r3 \   # check the versions
+        build-base=0.5-r3 \  
         cmake=3.24.3-r0 \
         boost1.80-dev=1.80.0-r3
 WORKDIR /llamafileapp
