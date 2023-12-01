@@ -275,14 +275,6 @@ static dontinline bool GetNvccArchFlag(char *nvcc, char flag[static 32]) {
 
 static bool CompileNativeCuda(char dso[static PATH_MAX]) {
 
-    // find full path of nvidia compiler
-    char nvcc[PATH_MAX];
-    if (!GetNvccPath(nvcc)) {
-        tinyprint(2, "warning: couldn't find nvcc (nvidia c compiler) "
-                     "try setting $CUDA_PATH if it's installed\n", NULL);
-        return false;
-    }
-
     // extract source code
     char src[PATH_MAX];
     bool needs_rebuild = false;
@@ -326,6 +318,14 @@ static bool CompileNativeCuda(char dso[static PATH_MAX]) {
         }
     }
 
+    // find full path of nvidia compiler
+    char nvcc[PATH_MAX];
+    if (!GetNvccPath(nvcc)) {
+        tinyprint(2, "warning: couldn't find nvcc (nvidia c compiler) "
+                     "try setting $CUDA_PATH if it's installed\n", NULL);
+        return false;
+    }
+
     // create temporary output path for atomicity
     char tmpdso[PATH_MAX];
     if (!CreateTempPath(dso, tmpdso)) {
@@ -357,6 +357,11 @@ static bool CompileNativeCuda(char dso[static PATH_MAX]) {
 }
 
 static bool ImportCudaImpl(void) {
+
+    // No dynamic linking support on OpenBSD yet.
+    if (IsOpenbsd()) {
+        return false;
+    }
 
     // get native cuda dll if possible
     char dso[PATH_MAX];

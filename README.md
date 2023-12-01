@@ -64,18 +64,14 @@ chmod +x llamafile
 On macOS with Apple Silicon you need to have Xcode installed for
 llamafile to be able to bootstrap itself.
 
-On Windows, you may need to rename `llamafile` to `llamafile.exe` in
-order for it to run. Windows also has a maximum file size limit of 4GB
-for executables. The LLaVA server executable above is just 30MB shy of
-that limit, so it'll work on Windows, but with larger models like
-WizardCoder 13B, you need to store the weights in a separate file.
-
 If you use zsh and have trouble running llamafile, try saying `sh -c
 ./llamafile`. This is due to a bug that was fixed in zsh 5.9+. The same
 is the case for Python `subprocess`, old versions of Fish, etc.
 
-On Linux `binfmt_misc` has been known to cause problems. You can fix
-that by installing the actually portable executable interpreter.
+On some Linux systems, you might get errors relating to `run-detectors`
+or WINE. This is due to `binfmt_misc` registrations. You can fix that by
+adding an additional registration for the APE file format llamafile
+uses:
 
 ```sh
 sudo wget -O /usr/bin/ape https://cosmo.zip/pub/cosmos/bin/ape-$(uname -m).elf
@@ -83,6 +79,29 @@ sudo chmod +x /usr/bin/ape
 sudo sh -c "echo ':APE:M::MZqFpD::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register"
 sudo sh -c "echo ':APE-jart:M::jartsr::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register"
 ```
+
+On Windows, you may need to rename `llamafile` to `llamafile.exe` in
+order for it to run. Windows also has a maximum file size limit of 4GB
+for executables. The LLaVA server executable above is just 30MB shy of
+that limit, so it'll work on Windows, but with larger models like
+WizardCoder 13B, you need to store the weights in a separate file.
+Here's an example of how to do that. Let's say you want to try Mistral.
+In that case you can open PowerShell and run these commands:
+
+```
+curl -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.1/llamafile-server-0.1
+curl -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
+.\llamafile.exe -m mistral.gguf
+```
+
+On WSL, it's recommended that the WIN32 interop feature be disabled:
+
+```sh
+sudo sh -c "echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop"
+```
+
+On any platform, if your llamafile process is immediately killed, check
+if you have CrowdStrike and then ask to be whitelisted.
 
 ### GPU Support
 
@@ -113,7 +132,7 @@ can download the latest release and add it to your path.
 ```sh
 mkdir -p cosmocc
 cd cosmocc
-curl -L https://github.com/jart/cosmopolitan/releases/download/3.1.1/cosmocc-3.1.1.zip >cosmocc.zip
+curl -L https://github.com/jart/cosmopolitan/releases/download/3.1.2/cosmocc-3.1.2.zip >cosmocc.zip
 unzip cosmocc.zip
 cd ..
 export PATH="$PWD/cosmocc/bin:$PATH"
@@ -220,6 +239,42 @@ share with your friends.
 (Note that the examples provided above are not endorsements or
 recommendations of specific models, licenses, or data sets on the part
 of Mozilla.)
+
+### Security
+
+llamafile adds pledge() and SECCOMP sandboxing to llama.cpp. This is
+enabled by default. It can be turned off by passing the `--unsecure`
+flag. Sandboxing is currently only supported on Linux and OpenBSD; on
+other platforms it'll simply log a warning.
+
+Our approach to security has these benefits:
+
+1. After it starts up, your HTTP server isn't able to access the
+   filesystem at all. This is good, since it means if someone discovers
+   a bug in the llama.cpp server, then it's much less likely they'll be
+   able to access sensitive information on your machine or make changes
+   to its configuration. On Linux, we're able to sandbox things even
+   further; the only networking related system call the HTTP server will
+   allowed to use after starting up, is accept(). That further limits an
+   attacker's ability to exfiltrate information, in the event that your
+   HTTP server is compromised.
+
+2. The main CLI command won't be able to access the network at all. This
+   is enforced by the operating system kernel. It also won't be able to
+   write to the file system. This keeps your computer safe in the event
+   that a bug is ever discovered in the the GGUF file format that lets
+   an attacker craft malicious weights files and post them online. The
+   only exception to this rule is if you pass the `--prompt-cache` flag
+   without also specifying `--prompt-cache-ro`. In that case, security
+   currently needs to be weakened to allow `cpath` and `wpath` access,
+   but network access will remain forbidden.
+
+Therefore your llamafile is able to protect itself against the outside
+world, but that doesn't mean you're protected from llamafile. Sandboxing
+is self-imposed. If you obtained your llamafile from an untrusted source
+then its author could have simply modified it to not do that. In that
+case, you can run the untrusted llamafile inside another sandbox, such
+as a virtual machine, to make sure it behaves how you expect.
 
 ## zipalign documentation
 
