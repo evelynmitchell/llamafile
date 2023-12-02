@@ -2,64 +2,164 @@
 
 ![llamafile-250](llamafile/llamafile.png)
 
-**llamafile lets you distribute and run LLMs with a single file ([blog post](https://hacks.mozilla.org/2023/11/introducing-llamafile/))**
+**llamafile lets you distribute and run LLMs with a single file. ([announcement blog post](https://hacks.mozilla.org/2023/11/introducing-llamafile/))**
 
-Our goal is to make the "build once anywhere, run anywhere" dream come
-true for AI developers. We're doing that by combining [llama.cpp](https://github.com/ggerganov/llama.cpp) 
-with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) into one 
-framework that lets you build apps for LLMs as a single-file artifact 
-that runs locally on most PCs and servers.
+Our goal is to make open source large language models much more 
+accessible to both developers and end users. We're doing that by 
+combining [llama.cpp](https://github.com/ggerganov/llama.cpp) with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) into one 
+framework that collapses all the complexity of LLMs down to 
+a single-file executable (called a "llamafile") that runs
+locally on most computers, with no installation.
 
-First, your llamafiles can run on multiple CPU microarchitectures. We
+## Quickstart
+
+The easiest way to try it for yourself is to download our example 
+llamafile for the [LLaVA](https://llava-vl.github.io/) model (license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/), 
+[OpenAI](https://openai.com/policies/terms-of-use)). LLaVA is a new LLM that can do more 
+than just chat; you can also upload images and ask it questions 
+about them. With llamafile, this all happens locally; no data 
+ever leaves your computer.
+
+1. Download [llava-v1.5-7b-q4-server.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true) (3.97 GB).
+
+2. Open your computer's terminal.
+
+3. If you're using macOS, Linux, or BSD, you'll need to grant permission 
+for your computer to execute this new file. (You only need to do this 
+once.)
+
+```sh
+chmod +x llava-v1.5-7b-q4-server.llamafile
+```
+
+4. If you're on Windows, rename the file by adding ".exe" on the end.
+
+5. Run the llamafile. e.g.:
+
+```sh
+./llava-v1.5-7b-q4-server.llamafile
+```
+
+6. Your browser should open automatically and display a chat interface. 
+(If it doesn't, just open your browser and point it at https://localhost:8080.)
+
+7. When you're done chatting, return to your terminal and hit 
+```Control-C``` to shut down llamafile.
+
+**Having trouble? See the "Gotchas" section below.**
+
+## Other example llamafiles
+
+We also provide example llamafiles for two other models, so you can 
+easily try out llamafile with different kinds of LLMs.
+
+| Model | License | Command-line llamafile | Server llamafile |
+| --- | --- | --- | --- |
+| Mistral-7B-Instruct | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
+| LLaVA 1.5 | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | (Not provided because this model's features are best utilized via the web UI) | **[llava-v1.5-7b-q4-server.llamafile (3.97 GB)](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
+| WizardCoder-Python-13B | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [wizardcoder-python-13b-main.llamafile (7.33 GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile (7.33GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
+
+"Server llamafiles" work just like the LLaVA example above: you simply run 
+them from your terminal and then access the chat UI in your web browser at 
+https://localhost:8080. 
+
+"Command-line llamafiles" run entirely inside your terminal and 
+operate just like  llama.cpp's "main" function. This means you 
+have to provide some command-line parameters, just like with 
+llama.cpp.
+
+Here is an example for the Mistral command-line llamafile:
+
+```sh
+./mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile --temp 0.7 -r '\n' -p '### Instruction: Write a story about llamas\n### Response:\n'
+```
+
+And here is an example for WizardCoder-Python command-line llamafile:
+
+```sh
+./wizardcoder-python-13b-main.llamafile --temp 0 -r '\n' -p '\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
+```
+
+As before, macOS, Linux, and BSD users will need to use the "chmod" 
+command to grant execution permissions to the file before running 
+these llamafiles for the first time.
+
+Unfortunately, Windows users cannot make use of these example llamafiles 
+because Windows has a maximum executable file size of 4GB, and all of 
+these examples exceed that size. (The LLaVA llamafile works on Windows because it is 30MB shy of the size limit.) But don't lose heart: llamafile allows 
+you to use external weights; this is described later in this document.
+
+**Having trouble? See the "Gotchas" section below.**
+
+## How llamafile works
+
+A llamafile is an executable LLM that you can run on your own 
+computer. It contains the weights for a given open source LLM, as well 
+as everything needed to actually run that model on your computer. 
+There's nothing to install or configure (with a few caveats, discussed 
+in subsequent sections of this document).
+
+This is all accomplished by combining llama.cpp with Cosmopolitan Libc, 
+which provides some useful capabilities:
+
+1. llamafiles can run on multiple CPU microarchitectures. We
 added runtime dispatching to llama.cpp that lets new Intel systems use
 modern CPU features without trading away support for older computers.
 
-Secondly, your llamafiles can run on multiple CPU architectures. We do
+2. llamafiles can run on multiple CPU architectures. We do
 that by concatenating AMD64 and ARM64 builds with a shell script that
 launches the appropriate one. Our file format is compatible with WIN32
 and most UNIX shells. It's also able to be easily converted (by either
 you or your users) to the platform-native format, whenever required.
 
-Thirdly, your llamafiles can run on six OSes (macOS, Windows, Linux,
-FreeBSD, OpenBSD, and NetBSD). You'll only need to build your code once,
-using a Linux-style toolchain. The GCC-based compiler we provide is
-itself an Actually Portable Executable, so you can build your software
-for all six OSes from the comfort of whichever one you prefer most for
-development.
+3. llamafiles can run on six OSes (macOS, Windows, Linux,
+FreeBSD, OpenBSD, and NetBSD). If you make your own llama files, you'll 
+only need to build your code once, using a Linux-style toolchain. The 
+GCC-based compiler we provide is itself an Actually Portable Executable, 
+so you can build your software for all six OSes from the comfort of 
+whichever one you prefer most for development.
 
-Lastly, the weights for your LLM can be embedded within your llamafile.
+4. The weights for an LLM can be embedded within the llamafile.
 We added support for PKZIP to the GGML library. This lets uncompressed
 weights be mapped directly into memory, similar to a self-extracting
 archive. It enables quantized weights distributed online to be prefixed
 with a compatible version of the llama.cpp software, thereby ensuring
 its originally observed behaviors can be reproduced indefinitely.
 
-## Binary Instructions
+5. Finally, with the tools included in this project you can create your 
+*own* llamafiles, using any compatible model weights you want. You can 
+then distribute these llamafiles to other people, who can easily make 
+use of them regardless of what kind of computer they have.
 
-We provide example binaries that embed several different models. You can
-download these from Hugging Face via the links below. "Command-line
-binaries" run from the command line, just as if you were invoking
-llama.cpp's "main" function manually. "Server binaries" launch a local
-web server (at 127.0.0.1:8080) that provides a web-based chatbot.
+## Using llamafile with external weights
 
-| Model | Command-line binary | Server binary |
-| --- | --- | --- |
-| Mistral-7B-Instruct | [mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
-| LLaVA 1.5 | (Not provided because this model's features are best utilized via the web UI) | **[llava-v1.5-7b-q4-server.llamafile (3.97 GB)](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
-| WizardCoder-Python-13B | [wizardcoder-python-13b-main.llamafile (7.33 GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile (7.33GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
+Even though our example llamafiles have the weights built-in, you don't 
+*have* to use llamafile that way. Instead, you can download *just* the 
+llamafile software (without any weights included) from our releases page. 
+You can then use it alongside any external weights you may have on hand. 
+External weights are particularly useful for Windows users because they 
+enable you to work around Windows' 4GB executable file size limit. 
 
-You can also also download *just* the llamafile software (without any
-weights included) from our releases page, or directly in your terminal
-or command prompt. This is mandatory currently on Windows.
+For Windows users, here's an example for the Mistral LLM:
 
 ```sh
-curl -L https://github.com/Mozilla-Ocho/llamafile/releases/download/0.1/llamafile-server-0.1 >llamafile
-chmod +x llamafile
-./llamafile --help
-./llamafile -m ~/weights/foo.gguf
+curl -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.2.1/llamafile-server-0.2.1
+curl -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
+.\llamafile.exe -m mistral.gguf
 ```
 
-### Gotchas
+Here's the same example, but for macOS, Linux, and BSD users:
+
+```sh
+curl -L https://github.com/Mozilla-Ocho/llamafile/releases/download/0.2.1/llamafile-server-0.2.1 >llamafile
+curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf >mistral.gguf
+chmod +x llamafile
+./llamafile -m mistral.gguf
+```
+
+
+
+## Gotchas
 
 On macOS with Apple Silicon you need to have Xcode installed for
 llamafile to be able to bootstrap itself.
@@ -80,19 +180,14 @@ sudo sh -c "echo ':APE:M::MZqFpD::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/regis
 sudo sh -c "echo ':APE-jart:M::jartsr::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register"
 ```
 
-On Windows, you may need to rename `llamafile` to `llamafile.exe` in
-order for it to run. Windows also has a maximum file size limit of 4GB
+As mentioned above, on Windows you may need to rename your llamafile by 
+adding `.exe` to the filename. 
+
+Also as mentioned above, Windows also has a maximum file size limit of 4GB
 for executables. The LLaVA server executable above is just 30MB shy of
 that limit, so it'll work on Windows, but with larger models like
-WizardCoder 13B, you need to store the weights in a separate file.
-Here's an example of how to do that. Let's say you want to try Mistral.
-In that case you can open PowerShell and run these commands:
-
-```
-curl -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.1/llamafile-server-0.1
-curl -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
-.\llamafile.exe -m mistral.gguf
-```
+WizardCoder 13B, you need to store the weights in a separate file. An 
+example is provided above; see "Using llamafile with external weights."
 
 On WSL, it's recommended that the WIN32 interop feature be disabled:
 
@@ -103,7 +198,7 @@ sudo sh -c "echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop"
 On any platform, if your llamafile process is immediately killed, check
 if you have CrowdStrike and then ask to be whitelisted.
 
-### GPU Support
+## GPU support
 
 On Apple Silicon, everything should just work if Xcode is installed.
 
@@ -123,7 +218,7 @@ In the event that GPU support couldn't be compiled and dynamically
 linked on the fly for any reason, llamafile will fall back to CPU
 inference.
 
-## Source Instructions
+## Source instructions
 
 Here's how to build llamafile from source. First, you need the cosmocc
 toolchain, which is a fat portable binary version of GCC. Here's how you
@@ -132,7 +227,7 @@ can download the latest release and add it to your path.
 ```sh
 mkdir -p cosmocc
 cd cosmocc
-curl -L https://github.com/jart/cosmopolitan/releases/download/3.1.2/cosmocc-3.1.2.zip >cosmocc.zip
+curl -L https://github.com/jart/cosmopolitan/releases/download/3.1.3/cosmocc-3.1.3.zip >cosmocc.zip
 unzip cosmocc.zip
 cd ..
 export PATH="$PWD/cosmocc/bin:$PATH"
@@ -145,9 +240,7 @@ make -j8
 ```
 
 Here's an example of how to generate code for a libc function using the
-llama.cpp command line interface, utilizing [WizardCoder-Python-13B](https://huggingface.co/TheBloke/WizardCoder-Python-13B-V1.0-GGUF/tree/main)
-(license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/))
-weights.
+llama.cpp command line interface, utilizing WizardCoder-Python-13B weights:
 
 ```sh
 make -j8 o//llama.cpp/main/main
@@ -158,8 +251,7 @@ o//llama.cpp/main/main \
   -p $'```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
 ```
 
-Here's a similar example that instead utilizes [Mistral-7B-Instruct](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/tree/main) 
-(license: [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)) weights.
+Here's a similar example that instead utilizes Mistral-7B-Instruct weights:
 
 ```sh
 make -j8 o//llama.cpp/main/main
@@ -170,13 +262,10 @@ o//llama.cpp/main/main \
   -p $'### Instruction: Write a story about llamas\n### Response:\n'
 ```
 
-
 Here's an example of how to run llama.cpp's built-in HTTP server in such
 a way that the weights are embedded inside the executable. This example
-uses [LLaVA v1.5-7B](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/tree/main) (license: [LLaMA](https://github.com/facebookresearch/llama/blob/main/LICENSE), 
-[OpenAI](https://openai.com/policies/terms-of-use)),
-a multimodal LLM that works with llama.cpp's recently-added support for
-image inputs.
+uses LLaVA v1.5-7B, a multimodal LLM that works with llama.cpp's 
+recently-added support for image inputs.
 
 ```sh
 make -j8
@@ -228,53 +317,13 @@ executable:
 
 ```
 mv o//llama.cpp/server/server server.com
-zip server.com .args
+o//llamafile/zipalign -j0 server.com .args
 mv server.com server
 ./server
 ```
 
 Congratulations. You've just made your own LLM executable that's easy to
 share with your friends.
-
-(Note that the examples provided above are not endorsements or
-recommendations of specific models, licenses, or data sets on the part
-of Mozilla.)
-
-### Security
-
-llamafile adds pledge() and SECCOMP sandboxing to llama.cpp. This is
-enabled by default. It can be turned off by passing the `--unsecure`
-flag. Sandboxing is currently only supported on Linux and OpenBSD; on
-other platforms it'll simply log a warning.
-
-Our approach to security has these benefits:
-
-1. After it starts up, your HTTP server isn't able to access the
-   filesystem at all. This is good, since it means if someone discovers
-   a bug in the llama.cpp server, then it's much less likely they'll be
-   able to access sensitive information on your machine or make changes
-   to its configuration. On Linux, we're able to sandbox things even
-   further; the only networking related system call the HTTP server will
-   allowed to use after starting up, is accept(). That further limits an
-   attacker's ability to exfiltrate information, in the event that your
-   HTTP server is compromised.
-
-2. The main CLI command won't be able to access the network at all. This
-   is enforced by the operating system kernel. It also won't be able to
-   write to the file system. This keeps your computer safe in the event
-   that a bug is ever discovered in the the GGUF file format that lets
-   an attacker craft malicious weights files and post them online. The
-   only exception to this rule is if you pass the `--prompt-cache` flag
-   without also specifying `--prompt-cache-ro`. In that case, security
-   currently needs to be weakened to allow `cpath` and `wpath` access,
-   but network access will remain forbidden.
-
-Therefore your llamafile is able to protect itself against the outside
-world, but that doesn't mean you're protected from llamafile. Sandboxing
-is self-imposed. If you obtained your llamafile from an untrusted source
-then its author could have simply modified it to not do that. In that
-case, you can run the untrusted llamafile inside another sandbox, such
-as a virtual machine, to make sure it behaves how you expect.
 
 ## zipalign documentation
 
@@ -304,7 +353,7 @@ FLAGS
   -0        store uncompressed (currently default)
 ```
 
-## Technical Details
+## Technical details
 
 Here is a succinct overview of the tricks we used to create the fattest
 executable format ever. The long story short is llamafile is a shell
@@ -317,7 +366,7 @@ The llama.cpp executable then opens the shell script again as a file,
 and calls mmap() again to pull the weights into memory and make them
 directly accessible to both the CPU and GPU.
 
-### ZIP Weights Embedding
+### ZIP weights embedding
 
 The trick to embedding weights inside llama.cpp executables is to ensure
 the local file is aligned on a page size boundary. That way, assuming
@@ -330,7 +379,7 @@ program should be able to read them, provided they support ZIP64. This
 makes the weights much more easily accessible than they otherwise would
 have been, had we invented our own file format for concatenated files.
 
-### Microarchitectural Portability
+### Microarchitectural portability
 
 On Intel and AMD microprocessors, llama.cpp spends most of its time in
 the matmul quants, which are usually written thrice for SSSE3, AVX, and
@@ -340,7 +389,7 @@ that can be `#include`ed multiple times, with varying
 wrapper function is added which uses Cosmopolitan's `X86_HAVE(FOO)`
 feature to runtime dispatch to the appropriate implementation.
 
-### Architecture Portability
+### Architecture portability
 
 llamafile solves architecture portability by building llama.cpp twice:
 once for AMD64 and again for ARM64. It then wraps them with a shell
@@ -356,7 +405,7 @@ program that comes included with the `cosmocc` compiler. What the
 the host platform's native executable format. This guarantees a fallback
 path exists for traditional release processes when it's needed.
 
-### GPU Support
+### GPU support
 
 Cosmopolitan Libc uses static linking, since that's the only way to get
 the same executable to run on six OSes. This presents a challenge for
@@ -396,6 +445,48 @@ avoid these tradeoffs entirely. See
 [cosmopolitan/dlopen.c](https://github.com/jart/cosmopolitan/blob/master/libc/dlopen/dlopen.c)
 for further details.
 
+## A note about models
+
+The example llamafiles provided above should not be interpreted as 
+endorsements or recommendations of specific models, licenses, or data 
+sets on the part of Mozilla.
+
+## Security
+
+llamafile adds pledge() and SECCOMP sandboxing to llama.cpp. This is
+enabled by default. It can be turned off by passing the `--unsecure`
+flag. Sandboxing is currently only supported on Linux and OpenBSD on
+systems without GPUs; on other platforms it'll simply log a warning.
+
+Our approach to security has these benefits:
+
+1. After it starts up, your HTTP server isn't able to access the
+   filesystem at all. This is good, since it means if someone discovers
+   a bug in the llama.cpp server, then it's much less likely they'll be
+   able to access sensitive information on your machine or make changes
+   to its configuration. On Linux, we're able to sandbox things even
+   further; the only networking related system call the HTTP server will
+   allowed to use after starting up, is accept(). That further limits an
+   attacker's ability to exfiltrate information, in the event that your
+   HTTP server is compromised.
+
+2. The main CLI command won't be able to access the network at all. This
+   is enforced by the operating system kernel. It also won't be able to
+   write to the file system. This keeps your computer safe in the event
+   that a bug is ever discovered in the the GGUF file format that lets
+   an attacker craft malicious weights files and post them online. The
+   only exception to this rule is if you pass the `--prompt-cache` flag
+   without also specifying `--prompt-cache-ro`. In that case, security
+   currently needs to be weakened to allow `cpath` and `wpath` access,
+   but network access will remain forbidden.
+
+Therefore your llamafile is able to protect itself against the outside
+world, but that doesn't mean you're protected from llamafile. Sandboxing
+is self-imposed. If you obtained your llamafile from an untrusted source
+then its author could have simply modified it to not do that. In that
+case, you can run the untrusted llamafile inside another sandbox, such
+as a virtual machine, to make sure it behaves how you expect.
+
 ## Licensing
 
 While the llamafile project is Apache 2.0-licensed, our changes
@@ -404,10 +495,3 @@ itself) so as to remain compatible and upstreamable in the future,
 should that be desired.
 
 The llamafile logo on this page was generated with the assistance of DALL·E 3.
-
-## Known Issues
-
-- The 64-bit version of Windows has a 4GB file size limit. While
-  llamafile will work fine on 64-bit Windows with the weights as a
-  separate file, you'll get an error if you load them into the
-  executable itself and try to run it.

@@ -7,6 +7,8 @@
 #include "llama.cpp/grammar-parser.h"
 #include "llama.cpp/llava/clip.h"
 #include "llama.cpp/stb_image.h"
+#include "llama.cpp/ggml-metal.h"
+#include "llama.cpp/ggml-cuda.h"
 #include "llamafile/llamafile.h"
 
 #define CPPHTTPLIB_NO_EXCEPTIONS 1
@@ -2400,9 +2402,7 @@ json oaicompat_completion_params_parse(
     }
 
     // Handle 'stop' field
-    if (body["stop"].is_null()) {
-        llama_params["stop"] = json::array({});
-    } else if (body["stop"].is_string()) {
+    if (body.contains("stop") && body["stop"].is_string()) {
         llama_params["stop"] = json::array({body["stop"].get<std::string>()});
     } else {
         llama_params["stop"] = json_value(body, "stop", json::array());
@@ -3006,7 +3006,7 @@ int main(int argc, char **argv)
         llamafile_launch_browser(url);
     }
 
-    if (!sparams.unsecure) {
+    if (!sparams.unsecure && !ggml_metal_supported() && !ggml_cuda_supported()) {
         // Enables pledge() security on Linux and OpenBSD.
         // - We do this *after* binding the server socket.
         // - We do this *after* opening the log file for writing.
