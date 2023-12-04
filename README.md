@@ -1,6 +1,6 @@
 # llamafile
 
-![llamafile-250](llamafile/llamafile.png)
+<img src="llamafile.svg" width="350" height="350">
 
 **llamafile lets you distribute and run LLMs with a single file. ([announcement blog post](https://hacks.mozilla.org/2023/11/introducing-llamafile/))**
 
@@ -197,6 +197,31 @@ sudo sh -c "echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop"
 
 On any platform, if your llamafile process is immediately killed, check
 if you have CrowdStrike and then ask to be whitelisted.
+
+## Supported OSes and CPUs
+
+llamafile supports the following operating systems, which require a minimum 
+stock install:
+
+- Linux 2.6.18+ (ARM64 or AMD64) i.e. any distro RHEL5 or newer
+- macOS 15.6+ (ARM64 or AMD64, with GPU only supported on ARM64)
+- Windows 8+ (AMD64)
+- FreeBSD 13+ (AMD64, GPU should work in theory)
+- NetBSD 9.2+ (AMD64, GPU should work in theory)
+- OpenBSD 7+ (AMD64, no GPU support)
+
+llamafile supports the following CPUs:
+
+- AMD64 microprocessors must have SSE3. Otherwise llamafile will
+print an error and refuse to run. This means that if you have an Intel
+CPU, it needs to be Intel Core or newer (circa 2006+), and if you
+have an AMD CPU, then it needs to be Bulldozer or newer (circa
+2011+). If you have a newer CPU with AVX, or better yet AVX2, then
+llamafile will utilize your chipset features to go faster. There is
+no support for AVX512+ runtime dispatching yet.
+- ARM64 microprocessors must have ARMv8a+. This means everything from
+Apple Silicon to 64-bit Raspberry Pis will work, provided your
+weights fit into memory.
 
 ## GPU support
 
@@ -495,3 +520,6 @@ itself) so as to remain compatible and upstreamable in the future,
 should that be desired.
 
 The llamafile logo on this page was generated with the assistance of DALL·E 3.
+
+![star-history-2023123](https://github.com/Mozilla-Ocho/llamafile/assets/42821/978d49be-e383-44df-ae6c-3f542c6130f9)
+
