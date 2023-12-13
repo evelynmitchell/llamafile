@@ -1,5 +1,5 @@
 // -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2023 Mozilla Foundation
 //
@@ -33,9 +33,15 @@
 
 __static_yoink("llama.cpp/ggml.h");
 __static_yoink("llamafile/compcap.cu");
+__static_yoink("llama.cpp/tinyblas.h");
+__static_yoink("llama.cpp/tinyblas.cu");
+__static_yoink("llama.cpp/ggml-impl.h");
 __static_yoink("llamafile/llamafile.h");
 __static_yoink("llama.cpp/ggml-cuda.h");
+__static_yoink("llama.cpp/ggml-alloc.h");
 __static_yoink("llama.cpp/ggml-cuda.cu");
+__static_yoink("llama.cpp/ggml-backend.h");
+__static_yoink("llama.cpp/ggml-backend-impl.h");
 
 #define NVCC_LIBS "-lcublas"
 
@@ -59,7 +65,13 @@ static const struct Source {
     {"/zip/llama.cpp/ggml.h", "ggml.h"},
     {"/zip/llamafile/compcap.cu", "compcap.cu"},
     {"/zip/llamafile/llamafile.h", "llamafile.h"},
+    {"/zip/llama.cpp/tinyblas.h", "tinyblas.h"},
+    {"/zip/llama.cpp/tinyblas.cu", "tinyblas.cu"},
+    {"/zip/llama.cpp/ggml-impl.h", "ggml-impl.h"},
     {"/zip/llama.cpp/ggml-cuda.h", "ggml-cuda.h"},
+    {"/zip/llama.cpp/ggml-alloc.h", "ggml-alloc.h"},
+    {"/zip/llama.cpp/ggml-backend.h", "ggml-backend.h"},
+    {"/zip/llama.cpp/ggml-backend-impl.h", "ggml-backend-impl.h"},
     {"/zip/llama.cpp/ggml-cuda.cu", "ggml-cuda.cu"}, // must come last
 };
 
@@ -87,6 +99,8 @@ static struct Cuda {
     typeof(ggml_cuda_compute_forward) *compute_forward;
     typeof(ggml_cuda_get_device_count) *get_device_count;
     typeof(ggml_cuda_get_device_description) *get_device_description;
+    typeof(ggml_backend_reg_cuda_init) *reg_cuda_init;
+    typeof(ggml_backend_cuda_buffer_type) *buffer_type;
 } ggml_cuda;
 
 static const char *Dlerror(void) {
@@ -376,18 +390,38 @@ static bool CompileNativeCuda(char dso[static PATH_MAX]) {
     return false;
 }
 
-static bool ImportCudaImpl(void) {
+static bool ExtractCudaDso(char dso[static PATH_MAX]) {
 
-    // No dynamic linking support on OpenBSD yet.
-    if (IsOpenbsd()) {
+    // see if prebuilt dso is bundled in zip assets
+    char zip[80];
+    strlcpy(zip, "/zip/llama.cpp/ggml-cuda.", PATH_MAX);
+    strlcat(zip, GetDsoExtension(), PATH_MAX);
+    if (!FileExists(zip)) {
         return false;
     }
 
-    // get native cuda dll if possible
-    char dso[PATH_MAX];
-    if (!CompileNativeCuda(dso)) {
-        return false;
+    // get destination path
+    llamafile_get_app_dir(dso, PATH_MAX);
+    strlcat(dso, "ggml-cuda.", PATH_MAX);
+    strlcat(dso, GetDsoExtension(), PATH_MAX);
+
+    // check if we need to extract again
+    switch (llamafile_is_file_newer_than(zip, dso)) {
+        case -1:
+            return false;
+        case false:
+            return true;
+        case true:
+            break;
+        default:
+            __builtin_unreachable();
     }
+
+    // extract prebuilt dso
+    return llamafile_extract(zip, dso);
+}
+
+static bool LinkCudaDso(const char *dso) {
 
     // runtime link dynamic shared object
     void *lib;
@@ -419,6 +453,8 @@ static bool ImportCudaImpl(void) {
     ok &= !!(ggml_cuda.compute_forward = cosmo_dlsym(lib, "ggml_cuda_compute_forward"));
     ok &= !!(ggml_cuda.get_device_count = cosmo_dlsym(lib, "ggml_cuda_get_device_count"));
     ok &= !!(ggml_cuda.get_device_description = cosmo_dlsym(lib, "ggml_cuda_get_device_description"));
+    ok &= !!(ggml_cuda.reg_cuda_init = cosmo_dlsym(lib, "ggml_backend_reg_cuda_init"));
+    ok &= !!(ggml_cuda.buffer_type = cosmo_dlsym(lib, "ggml_backend_cuda_buffer_type"));
     if (!ok) {
         tinyprint(2, Dlerror(), ": not all symbols could be imported\n", NULL);
         return false;
@@ -426,6 +462,30 @@ static bool ImportCudaImpl(void) {
 
     // we're good
     return true;
+}
+
+static bool ImportCudaImpl(void) {
+
+    // No dynamic linking support on OpenBSD yet.
+    if (IsOpenbsd()) {
+        return false;
+    }
+
+    // try building cuda code from source using cublas
+    char dso[PATH_MAX];
+    if (CompileNativeCuda(dso)) {
+        return LinkCudaDso(dso);
+    }
+
+    if (1) exit(1);
+
+    // try using a prebuilt dso
+    if (ExtractCudaDso(dso)) {
+        return LinkCudaDso(dso);
+    }
+
+    // too bad
+    return false;
 }
 
 static void ImportCuda(void) {
@@ -548,4 +608,15 @@ void ggml_cuda_get_device_description(int device,
     if (!ggml_cuda_supported()) return;
     return ggml_cuda.get_device_description(device, description,
                                             description_size);
+}
+
+ggml_backend_t ggml_backend_reg_cuda_init(const char * params,
+                                          void * user_data) {
+    if (!ggml_cuda_supported()) return 0;
+    return ggml_cuda.reg_cuda_init(params, user_data);
+}
+
+ggml_backend_buffer_type_t ggml_backend_cuda_buffer_type(int device) {
+    if (!ggml_cuda_supported()) return 0;
+    return ggml_cuda.buffer_type(device);
 }

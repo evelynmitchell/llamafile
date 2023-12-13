@@ -1,5 +1,6 @@
-// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
-// vi: set net ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
+// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+
 #include "llama.cpp/common.h"
 #include "llama.cpp/llama.h"
 #include "llamafile/version.h"
@@ -40,6 +41,13 @@ static const std::vector<struct quant_option> QUANT_OPTIONS = {
 };
 
 
+static bool is_integer_str(const char *s) {
+    if (*s == '-') ++s;
+    if (!*s) return false;
+    while (isdigit(*s)) ++s;
+    return !*s;
+}
+
 static bool try_parse_ftype(const std::string & ftype_str_in, llama_ftype & ftype, std::string & ftype_str_out) {
     std::string ftype_str;
 
@@ -53,9 +61,7 @@ static bool try_parse_ftype(const std::string & ftype_str_in, llama_ftype & ftyp
             return true;
         }
     }
-#ifndef _LIBCPP_NO_EXCEPTIONS
-    try {
-#endif
+    if (is_integer_str(ftype_str.c_str())) {
         int ftype_int = std::stoi(ftype_str);
         for (auto & it : QUANT_OPTIONS) {
             if (it.ftype == ftype_int) {
@@ -64,12 +70,7 @@ static bool try_parse_ftype(const std::string & ftype_str_in, llama_ftype & ftyp
                 return true;
             }
         }
-#ifndef _LIBCPP_NO_EXCEPTIONS
     }
-    catch (...) {
-        // stoi failed
-    }
-#endif
     return false;
 }
 
