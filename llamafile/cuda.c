@@ -33,8 +33,8 @@
 
 __static_yoink("llama.cpp/ggml.h");
 __static_yoink("llamafile/compcap.cu");
-__static_yoink("llama.cpp/tinyblas.h");
-__static_yoink("llama.cpp/tinyblas.cu");
+__static_yoink("llamafile/tinyblas.h");
+__static_yoink("llamafile/tinyblas.cu");
 __static_yoink("llama.cpp/ggml-impl.h");
 __static_yoink("llamafile/llamafile.h");
 __static_yoink("llama.cpp/ggml-cuda.h");
@@ -65,8 +65,8 @@ static const struct Source {
     {"/zip/llama.cpp/ggml.h", "ggml.h"},
     {"/zip/llamafile/compcap.cu", "compcap.cu"},
     {"/zip/llamafile/llamafile.h", "llamafile.h"},
-    {"/zip/llama.cpp/tinyblas.h", "tinyblas.h"},
-    {"/zip/llama.cpp/tinyblas.cu", "tinyblas.cu"},
+    {"/zip/llamafile/tinyblas.h", "tinyblas.h"},
+    {"/zip/llamafile/tinyblas.cu", "tinyblas.cu"},
     {"/zip/llama.cpp/ggml-impl.h", "ggml-impl.h"},
     {"/zip/llama.cpp/ggml-cuda.h", "ggml-cuda.h"},
     {"/zip/llama.cpp/ggml-alloc.h", "ggml-alloc.h"},
@@ -394,9 +394,10 @@ static bool ExtractCudaDso(char dso[static PATH_MAX]) {
 
     // see if prebuilt dso is bundled in zip assets
     char zip[80];
-    strlcpy(zip, "/zip/llama.cpp/ggml-cuda.", PATH_MAX);
-    strlcat(zip, GetDsoExtension(), PATH_MAX);
+    strlcpy(zip, "/zip/ggml-cuda.", sizeof(zip));
+    strlcat(zip, GetDsoExtension(), sizeof(zip));
     if (!FileExists(zip)) {
+        tinyprint(2, "prebuilt binary ", zip, " not found\n", NULL);
         return false;
     }
 
@@ -405,29 +406,20 @@ static bool ExtractCudaDso(char dso[static PATH_MAX]) {
     strlcat(dso, "ggml-cuda.", PATH_MAX);
     strlcat(dso, GetDsoExtension(), PATH_MAX);
 
-    // check if we need to extract again
-    switch (llamafile_is_file_newer_than(zip, dso)) {
-        case -1:
-            return false;
-        case false:
-            return true;
-        case true:
-            break;
-        default:
-            __builtin_unreachable();
-    }
-
     // extract prebuilt dso
     return llamafile_extract(zip, dso);
 }
 
-static bool LinkCudaDso(const char *dso) {
+static bool LinkCudaDso(char *dso) {
 
     // runtime link dynamic shared object
     void *lib;
     lib = cosmo_dlopen(dso, RTLD_LAZY);
     if (!lib) {
         tinyprint(2, Dlerror(), ": failed to load library\n", NULL);
+        if ((IsLinux() || IsBsd()) && !commandv("cc", dso, PATH_MAX)) {
+            tinyprint(2, "you need to install a c compiler for gpu support\n", NULL);
+        }
         return false;
     }
 
@@ -465,6 +457,7 @@ static bool LinkCudaDso(const char *dso) {
 }
 
 static bool ImportCudaImpl(void) {
+    char path[PATH_MAX];
 
     // No dynamic linking support on OpenBSD yet.
     if (IsOpenbsd()) {
@@ -472,16 +465,13 @@ static bool ImportCudaImpl(void) {
     }
 
     // try building cuda code from source using cublas
-    char dso[PATH_MAX];
-    if (CompileNativeCuda(dso)) {
-        return LinkCudaDso(dso);
+    if (CompileNativeCuda(path)) {
+        return LinkCudaDso(path);
     }
 
-    if (1) exit(1);
-
-    // try using a prebuilt dso
-    if (ExtractCudaDso(dso)) {
-        return LinkCudaDso(dso);
+    // try using a prebuilt path
+    if (ExtractCudaDso(path)) {
+        return LinkCudaDso(path);
     }
 
     // too bad

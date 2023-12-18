@@ -51,14 +51,15 @@ chmod +x llava-v1.5-7b-q4-server.llamafile
 
 ## Other example llamafiles
 
-We also provide example llamafiles for two other models, so you can
-easily try out llamafile with different kinds of LLMs.
+We also provide example llamafiles for other models, so you can easily
+try out llamafile with different kinds of LLMs.
 
-| Model | License | Command-line llamafile | Server llamafile |
-| --- | --- | --- | --- |
-| Mistral-7B-Instruct | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile (4.07 GB)](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
-| LLaVA 1.5 | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | (Not provided because this model's features are best utilized via the web UI) | **[llava-v1.5-7b-q4-server.llamafile (3.97 GB)](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
-| WizardCoder-Python-13B | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [wizardcoder-python-13b-main.llamafile (7.33 GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile (7.33GB)](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
+| Model | Size | License | Command-line llamafile | Server llamafile |
+| --- | --- | --- | --- | --- |
+| LLaVA 1.5 | 3.97 GB | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [llava-v1.5-7b-q4-main.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-main.llamafile?download=true) | **[llava-v1.5-7b-q4-server.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
+| Mistral-7B-Instruct | 4.07 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [mistral-7b-instruct-v0.1-Q4\_K\_M-main.llamafile](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4\_K\_M-server.llamafile](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
+| Mixtral-8x7B-Instruct | 30.03 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M.llamafile](https://huggingface.co/jartine/Mixtral-8x7B-v0.1.llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M.llamafile?download=true) | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M-server.llamafile](https://huggingface.co/jartine/Mixtral-8x7B-v0.1.llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M-server.llamafile?download=true) |
+| WizardCoder-Python-13B | 7.33 GB | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [wizardcoder-python-13b-main.llamafile](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
 
 "Server llamafiles" work just like the LLaVA example above: you simply
 run them from your terminal and then access the chat UI in your web
@@ -71,23 +72,31 @@ some command-line parameters, just like with llama.cpp.
 Here is an example for the Mistral command-line llamafile:
 
 ```sh
-./mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile --temp 0.7 -r '\n' -p '### Instruction: Write a story about llamas\n### Response:\n'
+./mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile --temp 0.7 -p '[INST]Write a story about llamas[/INST]'
 ```
 
 And here is an example for WizardCoder-Python command-line llamafile:
 
 ```sh
-./wizardcoder-python-13b-main.llamafile --temp 0 -r '\n' -p '\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
+./wizardcoder-python-13b-main.llamafile --temp 0 -e -r '```\n' -p '```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
 ```
 
-As before, macOS, Linux, and BSD users will need to use the "chmod" 
-command to grant execution permissions to the file before running 
-these llamafiles for the first time.
+And here's an example for the LLaVA command-line llamafile:
 
-Unfortunately, Windows users cannot make use of these example llamafiles 
-because Windows has a maximum executable file size of 4GB, and all of 
-these examples exceed that size. (The LLaVA llamafile works on Windows because it is 30MB shy of the size limit.) But don't lose heart: llamafile allows 
-you to use external weights; this is described later in this document.
+```sh
+./llava-v1.5-7b-q4-main.llamafile --temp 0.2 --image lemurs.jpg -e -p '### User: What do you see?\n### Assistant:'
+```
+
+As before, macOS, Linux, and BSD users will need to use the "chmod"
+command to grant execution permissions to the file before running these
+llamafiles for the first time.
+
+Unfortunately, Windows users cannot make use of many of these example
+llamafiles because Windows has a maximum executable file size of 4GB,
+and all of these examples exceed that size. (The LLaVA llamafile works
+on Windows because it is 30MB shy of the size limit.) But don't lose
+heart: llamafile allows you to use external weights; this is described
+later in this document.
 
 **Having trouble? See the "Gotchas" section below.**
 
@@ -143,7 +152,7 @@ enable you to work around Windows' 4GB executable file size limit.
 For Windows users, here's an example for the Mistral LLM:
 
 ```sh
-curl -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.3/llamafile-server-0.3
+curl -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.4/llamafile-server-0.4
 curl -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
 .\llamafile.exe -m mistral.gguf
 ```
@@ -151,7 +160,7 @@ curl -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GG
 Here's the same example, but for macOS, Linux, and BSD users:
 
 ```sh
-curl -L https://github.com/Mozilla-Ocho/llamafile/releases/download/0.3/llamafile-server-0.3 >llamafile
+curl -L https://github.com/Mozilla-Ocho/llamafile/releases/download/0.4/llamafile-server-0.4 >llamafile
 curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf >mistral.gguf
 chmod +x llamafile
 ./llamafile -m mistral.gguf
@@ -212,36 +221,32 @@ stock install:
 
 llamafile supports the following CPUs:
 
-- AMD64 microprocessors must have SSE3. Otherwise llamafile will
-print an error and refuse to run. This means that if you have an Intel
-CPU, it needs to be Intel Core or newer (circa 2006+), and if you
-have an AMD CPU, then it needs to be Bulldozer or newer (circa
-2011+). If you have a newer CPU with AVX, or better yet AVX2, then
-llamafile will utilize your chipset features to go faster. There is
-no support for AVX512+ runtime dispatching yet.
+- AMD64 microprocessors must have SSSE3. Otherwise llamafile will print
+  an error and refuse to run. This means that if you have an Intel CPU,
+  it needs to be Intel Core or newer (circa 2006+), and if you have an
+  AMD CPU, then it needs to be Bulldozer or newer (circa 2011+). If you
+  have a newer CPU with AVX, or better yet AVX2, then llamafile will
+  utilize your chipset features to go faster. There is no support for
+  AVX512+ runtime dispatching yet.
 - ARM64 microprocessors must have ARMv8a+. This means everything from
-Apple Silicon to 64-bit Raspberry Pis will work, provided your
-weights fit into memory.
+  Apple Silicon to 64-bit Raspberry Pis will work, provided your weights
+  fit into memory.
 
 ## GPU support
 
 On Apple Silicon, everything should just work if Xcode is installed.
 
-On Linux, Nvidia cuBLAS GPU support will be compiled on the fly if (1)
-you have the `cc` compiler installed, (2) you pass the `--n-gpu-layers
-35` flag (or whatever value is appropriate) to enable GPU, and (3) the
-CUDA developer toolkit is installed on your machine and the `nvcc`
-compiler is on your path.
+On Windows, GPU should just work so long as (1) you're using our release
+binaries, and (2) you pass the `-ngl 35` flag. You also need an NVIDIA
+graphics card that supports CUDA. There's no support yet for AMD GPUs. 
+You can also use CUDA via WSL by enabling [Nvidia CUDA on WSL](https://learn.microsoft.com/en-us/windows/ai/directml/gpu-cuda-in-wsl)
+and running your llamafiles inside of WSL. This will also allow you to use
+llamafiles greater than 4GB on Windows.
 
-On Windows, install [CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html) (you only need CUDA and the compiler, so use 
-the network installer and deselect other options). You must edit 
-Windows Environment Variables to add to PATH: 
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin
-Invoke x64 Native Tools Command Prompt for VS 2022 (this is required to 
-compile the dependencies for CUDA at first start) and run llamafile.
-For the first invocation, it will build a DLL with native GPU support. 
-When you invoke it with a model, verify GPU is used by looking for:
-"total VRAM used" to be a non-zero number (usually the size of the model).
+On Linux, Nvidia cuBLAS GPU support will be compiled on the fly if (1)
+you have the `cc` compiler installed, (2) you pass the `-ngl 35` flag to
+enable GPU, and (3) the CUDA developer toolkit is installed on your
+machine and the `nvcc` compiler is on your path.
 
 In the event that GPU support couldn't be compiled and dynamically
 linked on the fly for any reason, llamafile will fall back to CPU
@@ -300,13 +305,13 @@ Here's an example of how you can use llamafile to summarize HTML URLs:
 
 ```sh
 (
-  echo [INST]Summarize the following text:
+  echo '[INST]Summarize the following text:'
   links -codepage utf-8 \
         -force-html \
         -width 500 \
         -dump https://www.poetryfoundation.org/poems/48860/the-raven |
     sed 's/   */ /'
-  echo [/INST]
+  echo '[/INST]'
 ) | llamafile \
       -m mistral-7b-instruct-v0.1.Q4_K_M.gguf \
       -c 6700 \
