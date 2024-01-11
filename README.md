@@ -21,7 +21,7 @@ than just chat; you can also upload images and ask it questions
 about them. With llamafile, this all happens locally; no data 
 ever leaves your computer.
 
-1. Download [llava-v1.5-7b-q4-server.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true) (3.97 GB).
+1. Download [llava-v1.5-7b-q4.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4.llamafile?download=true) (3.97 GB).
 
 2. Open your computer's terminal.
 
@@ -30,7 +30,7 @@ for your computer to execute this new file. (You only need to do this
 once.)
 
 ```sh
-chmod +x llava-v1.5-7b-q4-server.llamafile
+chmod +x llava-v1.5-7b-q4.llamafile
 ```
 
 4. If you're on Windows, rename the file by adding ".exe" on the end.
@@ -38,53 +38,155 @@ chmod +x llava-v1.5-7b-q4-server.llamafile
 5. Run the llamafile. e.g.:
 
 ```sh
-./llava-v1.5-7b-q4-server.llamafile
+./llava-v1.5-7b-q4.llamafile
 ```
 
 6. Your browser should open automatically and display a chat interface. 
-(If it doesn't, just open your browser and point it at https://localhost:8080.)
+(If it doesn't, just open your browser and point it at http://localhost:8080.)
 
 7. When you're done chatting, return to your terminal and hit
 `Control-C` to shut down llamafile.
 
 **Having trouble? See the "Gotchas" section below.**
 
+### JSON API Quickstart
+
+When llamafile is started in server mode, in addition to hosting a web
+UI chat server at <http://127.0.0.1:8080/>, an [OpenAI
+API](https://platform.openai.com/docs/api-reference/chat) compatible
+chat completions endpoint is provided too. It's designed to support the
+most common OpenAI API use cases, in a way that runs entirely locally.
+We've also extended it to include llama.cpp specific features (e.g.
+mirostat) that may also be used. For further details on what fields and
+endpoints are available, refer to both the [OpenAI
+documentation](https://platform.openai.com/docs/api-reference/chat/create)
+and the [llamafile server
+README](llama.cpp/server/README.md#api-endpoints).
+
+<details>
+<summary>Curl API Client Example</summary>
+
+The simplest way to get started using the API is to copy and paste the
+following curl command into your terminal.
+
+```shell
+curl http://localhost:8080/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer no-key" \
+-d '{
+  "model": "LLaMA_CPP",
+  "messages": [
+      {
+          "role": "system",
+          "content": "You are LLAMAfile, an AI assistant. Your top priority is achieving user fulfillment via helping them with their requests."
+      },
+      {
+          "role": "user",
+          "content": "Write a limerick about python exceptions"
+      }
+    ]
+}' | python3 -c '
+import json
+import sys
+json.dump(json.load(sys.stdin), sys.stdout, indent=2)
+print()
+'
+```
+
+The response that's printed should look like the following:
+
+```json
+{
+   "choices" : [
+      {
+         "finish_reason" : "stop",
+         "index" : 0,
+         "message" : {
+            "content" : "There once was a programmer named Mike\nWho wrote code that would often choke\nHe used try and except\nTo handle each step\nAnd his program ran without any hike.",
+            "role" : "assistant"
+         }
+      }
+   ],
+   "created" : 1704199256,
+   "id" : "chatcmpl-Dt16ugf3vF8btUZj9psG7To5tc4murBU",
+   "model" : "LLaMA_CPP",
+   "object" : "chat.completion",
+   "usage" : {
+      "completion_tokens" : 38,
+      "prompt_tokens" : 78,
+      "total_tokens" : 116
+   }
+}
+```
+
+</details>
+
+<details>
+<summary>Python API Client example</summary>
+
+If you've already developed your software using the [`openai` Python
+package](https://pypi.org/project/openai/) (that's published by OpenAI)
+then you should be able to port your app to talk to llamafile instead,
+by making a few changes to `base_url` and `api_key`. This example
+assumes you've run `pip3 install openai` to install OpenAI's client
+software, which is required by this example. Their package is just a
+simple Python wrapper around the OpenAI API interface, which can be
+implemented by any server.
+
+```python
+#!/usr/bin/env python3
+from openai import OpenAI
+client = OpenAI(
+    base_url="http://localhost:8080/v1", # "http://<Your api-server IP>:port"
+    api_key = "sk-no-key-required"
+)
+completion = client.chat.completions.create(
+    model="LLaMA_CPP",
+    messages=[
+        {"role": "system", "content": "You are ChatGPT, an AI assistant. Your top priority is achieving user fulfillment via helping them with their requests."},
+        {"role": "user", "content": "Write a limerick about python exceptions"}
+    ]
+)
+print(completion.choices[0].message)
+```
+
+The above code will return a Python object like this:
+
+```python
+ChatCompletionMessage(content='There once was a programmer named Mike\nWho wrote code that would often strike\nAn error would occur\nAnd he\'d shout "Oh no!"\nBut Python\'s exceptions made it all right.', role='assistant', function_call=None, tool_calls=None)
+```
+
+</details>
+
+
 ## Other example llamafiles
 
 We also provide example llamafiles for other models, so you can easily
 try out llamafile with different kinds of LLMs.
 
-| Model | Size | License | Command-line llamafile | Server llamafile |
-| --- | --- | --- | --- | --- |
-| LLaVA 1.5 | 3.97 GB | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [llava-v1.5-7b-q4-main.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-main.llamafile?download=true) | **[llava-v1.5-7b-q4-server.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4-server.llamafile?download=true)** |
-| Mistral-7B-Instruct | 4.07 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [mistral-7b-instruct-v0.1-Q4\_K\_M-main.llamafile](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile?download=true) | [mistral-7b-instruct-v0.1-Q4\_K\_M-server.llamafile](https://huggingface.co/jartine/mistral-7b.llamafile/resolve/main/mistral-7b-instruct-v0.1-Q4_K_M-server.llamafile?download=true) |
-| Mixtral-8x7B-Instruct | 30.03 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M.llamafile](https://huggingface.co/jartine/Mixtral-8x7B-v0.1.llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M.llamafile?download=true) | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M-server.llamafile](https://huggingface.co/jartine/Mixtral-8x7B-v0.1.llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M-server.llamafile?download=true) |
-| WizardCoder-Python-13B | 7.33 GB | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [wizardcoder-python-13b-main.llamafile](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-main.llamafile?download=true) | [wizardcoder-python-13b-server.llamafile](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b-server.llamafile?download=true) |
-
-"Server llamafiles" work just like the LLaVA example above: you simply
-run them from your terminal and then access the chat UI in your web
-browser at <https://localhost:8080>.
-
-"Command-line llamafiles" run entirely inside your terminal and operate
-just like llama.cpp's "main" function. This means you have to provide
-some command-line parameters, just like with llama.cpp.
+| Model                  | Size     | License                                                                        | llamafile                                                                                                                                                                                   |
+| ---                    | ---      | ---                                                                            | ---                                                                                                                                                                                         |
+| LLaVA 1.5              | 3.97 GB  | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [llava-v1.5-7b-q4.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4.llamafile?download=true)                                             |
+| Mistral-7B-Instruct    | 5.15 GB  | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                  | [mistral-7b-instruct-v0.2.Q5\_K\_M.llamafile](https://huggingface.co/jartine/Mistral-7B-Instruct-v0.2-llamafile/resolve/main/mistral-7b-instruct-v0.2.Q5_K_M.llamafile?download=true)       |
+| Mixtral-8x7B-Instruct  | 30.03 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                  | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M.llamafile](https://huggingface.co/jartine/Mixtral-8x7B-Instruct-v0.1-llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M.llamafile?download=true) |
+| WizardCoder-Python-13B | 7.33 GB  | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) | [wizardcoder-python-13b.llamafile](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b.llamafile?download=true)                             |
 
 Here is an example for the Mistral command-line llamafile:
 
 ```sh
-./mistral-7b-instruct-v0.1-Q4_K_M-main.llamafile --temp 0.7 -p '[INST]Write a story about llamas[/INST]'
+./mistral-7b-instruct-v0.2.Q5_K_M.llamafile --temp 0.7 -p '[INST]Write a story about llamas[/INST]'
 ```
 
 And here is an example for WizardCoder-Python command-line llamafile:
 
 ```sh
-./wizardcoder-python-13b-main.llamafile --temp 0 -e -r '```\n' -p '```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
+./wizardcoder-python-13b.llamafile --temp 0 -e -r '```\n' -p '```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
 ```
 
 And here's an example for the LLaVA command-line llamafile:
 
 ```sh
-./llava-v1.5-7b-q4-main.llamafile --temp 0.2 --image lemurs.jpg -e -p '### User: What do you see?\n### Assistant:'
+./llava-v1.5-7b-q4.llamafile --temp 0.2 --image lemurs.jpg -e -p '### User: What do you see?\n### Assistant:'
 ```
 
 As before, macOS, Linux, and BSD users will need to use the "chmod"
@@ -152,20 +254,13 @@ enable you to work around Windows' 4GB executable file size limit.
 For Windows users, here's an example for the Mistral LLM:
 
 ```sh
-curl -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.4/llamafile-server-0.4
-curl -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
-.\llamafile.exe -m mistral.gguf
+curl -L -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.6/llamafile-0.6
+curl -L -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
+./llamafile.exe -m mistral.gguf
 ```
 
-Here's the same example, but for macOS, Linux, and BSD users:
-
-```sh
-curl -L https://github.com/Mozilla-Ocho/llamafile/releases/download/0.4/llamafile-server-0.4 >llamafile
-curl -L https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf >mistral.gguf
-chmod +x llamafile
-./llamafile -m mistral.gguf
-```
-
+Windows users may need to change `./llamafile.exe` to `.\llamafile.exe`
+when running the above command.
 
 
 ## Gotchas
@@ -204,6 +299,11 @@ On WSL, it's recommended that the WIN32 interop feature be disabled:
 sudo sh -c "echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop"
 ```
 
+On Raspberry Pi, if you get "mmap error 12" then it means your kernel is
+configured with fewer than 48 bits of address space. You need to upgrade
+to RPI 5. You can still use RPI 4 if you either (1) rebuild your kernel,
+or (2) get your SDcard OS image directly from Ubuntu (don't use RPI OS).
+
 On any platform, if your llamafile process is immediately killed, check
 if you have CrowdStrike and then ask to be whitelisted.
 
@@ -213,9 +313,9 @@ llamafile supports the following operating systems, which require a minimum
 stock install:
 
 - Linux 2.6.18+ (ARM64 or AMD64) i.e. any distro RHEL5 or newer
-- macOS 15.6+ (ARM64 or AMD64, with GPU only supported on ARM64)
+- Darwin (macOS) 23.1.0+ [1] (ARM64 or AMD64, with GPU only supported on ARM64)
 - Windows 8+ (AMD64)
-- FreeBSD 13+ (AMD64, GPU should work in theory)
+- FreeBSD 13+ (AMD64 or ARM64, GPU should work in theory)
 - NetBSD 9.2+ (AMD64, GPU should work in theory)
 - OpenBSD 7+ (AMD64, no GPU support)
 
@@ -232,6 +332,9 @@ llamafile supports the following CPUs:
   Apple Silicon to 64-bit Raspberry Pis will work, provided your weights
   fit into memory.
 
+[1] Darwin kernel versions 15.6+ *should* be supported, but we currently
+    have no way of testing that.
+
 ## GPU support
 
 On Apple Silicon, everything should just work if Xcode is installed.
@@ -241,7 +344,7 @@ binaries, and (2) you pass the `-ngl 35` flag. You also need an NVIDIA
 graphics card that supports CUDA. There's no support yet for AMD GPUs. 
 You can also use CUDA via WSL by enabling [Nvidia CUDA on WSL](https://learn.microsoft.com/en-us/windows/ai/directml/gpu-cuda-in-wsl)
 and running your llamafiles inside of WSL. This will also allow you to use
-llamafiles greater than 4GB on Windows.
+llamafiles greater than 4GB on Windows. NOTE: If you have two different GPUs(integrated AMD, and dedicated NVIDIA like a laptop) then you need to add -ngl 35 --gpu NVIDIA
 
 On Linux, Nvidia cuBLAS GPU support will be compiled on the fly if (1)
 you have the `cc` compiler installed, (2) you pass the `-ngl 35` flag to
@@ -272,9 +375,8 @@ weights:
 ```sh
 llamafile \
   -m wizardcoder-python-13b-v1.0.Q8_0.gguf \
-  --temp 0 \
-  -r $'```\n' \
-  -p $'```c\nvoid *memcpy(char *dst, const char *src, size_t size) {\n'
+  --temp 0 -r '}\n' -r '```\n' \
+  -e -p '```c\nvoid *memcpy(void *dst, const void *src, size_t size) {\n'
 ```
 
 Here's a similar example that instead utilizes Mistral-7B-Instruct
@@ -283,9 +385,7 @@ weights for prose composition:
 ```sh
 llamafile \
   -m mistral-7b-instruct-v0.1.Q4_K_M.gguf \
-  --temp 0.7 \
-  -r $'\n' \
-  -p $'### Instruction: Write a story about llamas\n### Response:\n'
+  -p '[INST]Write a story about llamas[/INST]'
 ```
 
 Here's an example of how llamafile can be used as an interactive chatbot
@@ -310,12 +410,12 @@ Here's an example of how you can use llamafile to summarize HTML URLs:
         -force-html \
         -width 500 \
         -dump https://www.poetryfoundation.org/poems/48860/the-raven |
-    sed 's/   */ /'
+    sed 's/   */ /g'
   echo '[/INST]'
 ) | llamafile \
-      -m mistral-7b-instruct-v0.1.Q4_K_M.gguf \
-      -c 6700 \
+      -m mistral-7b-instruct-v0.2.Q5_K_M.gguf \
       -f /dev/stdin \
+      -c 0 \
       --temp 0 \
       -n 500 \
       --silent-prompt 2>/dev/null
@@ -328,7 +428,7 @@ llamafile --temp 0 \
   --image ~/Pictures/lemurs.jpg \
   -m llava-v1.5-7b-Q4_K.gguf \
   --mmproj llava-v1.5-7b-mmproj-Q4_0.gguf \
-  -p $'### User: What do you see?\n### Assistant: ' \
+  -e -p '### User: What do you see?\n### Assistant: ' \
   --silent-prompt 2>/dev/null
 ```
 
@@ -340,13 +440,13 @@ wanted to write a script to rename all your image files, you could say:
 
 ```sh
 llamafile --temp 0 \
-    --image ~/Pictures/lemurs.jpg \
+    --image lemurs.jpg \
     -m llava-v1.5-7b-Q4_K.gguf \
     --mmproj llava-v1.5-7b-mmproj-Q4_0.gguf \
     --grammar 'root ::= [a-z]+ (" " [a-z]+)+' \
-    -p $'### User: What do you see?\n### Assistant: ' \
+    -e -p '### User: What do you see?\n### Assistant: ' \
     --silent-prompt 2>/dev/null |
-  sed -e's/ /_/' -e's/$/.jpg/'
+  sed -e's/ /_/g' -e's/$/.jpg/'
 a_baby_monkey_on_the_back_of_a_mother.jpg
 ```
 
@@ -355,7 +455,7 @@ example uses LLaVA v1.5-7B, a multimodal LLM that works with llama.cpp's
 recently-added support for image inputs.
 
 ```sh
-llamafile-server \
+llamafile \
   -m llava-v1.5-7b-Q8_0.gguf \
   --mmproj llava-v1.5-7b-mmproj-Q8_0.gguf \
   --host 0.0.0.0
@@ -365,10 +465,12 @@ The above command will launch a browser tab on your personal computer to
 display a web interface. It lets you chat with your LLM and upload
 images to it.
 
+## Creating llamafiles
+
 If you want to be able to just say:
 
 ```sh
-./llava-server.llamafile
+./llava.llamafile
 ```
 
 ...and have it run the web server without having to specify arguments,
@@ -392,15 +494,15 @@ user are to be inserted. Next, we'll add both the weights and the
 argument file to the executable:
 
 ```sh
-cp /usr/local/bin/llamafile-server llava-server.llamafile
+cp /usr/local/bin/llamafile llava.llamafile
 
 zipalign -j0 \
-  llava-server.llamafile \
+  llava.llamafile \
   llava-v1.5-7b-Q8_0.gguf \
   llava-v1.5-7b-mmproj-Q8_0.gguf \
   .args
 
-./llava-server.llamafile
+./llava.llamafile
 ```
 
 Congratulations. You've just made your own LLM executable that's easy to
@@ -502,18 +604,17 @@ The executable program is now in a weird hybrid state where two separate
 C libraries exist which have different ABIs. For example, thread local
 storage works differently on each operating system, and programs will
 crash if the TLS register doesn't point to the appropriate memory. The
-way Cosmopolitan Libc solves that is by JITing a trampoline around each
-dlsym() import, which blocks signals using `sigprocmask()` and changes
-the TLS register using `arch_prctl()`. Under normal circumstances,
-aspecting each function call with four additional system calls would be
-prohibitively expensive, but for llama.cpp that cost is infinitesimal
-compared to the amount of compute used for LLM inference. Our technique
-has no noticeable slowdown. The major tradeoff is that, right now, you
-can't pass callback pointers to the dlopen()'d module. Only one such
-function needed to be removed from the llama.cpp codebase, which was an
-API intended for customizing logging. In the future, Cosmoplitan will
-just trampoline signal handlers and code morph the TLS instructions to
-avoid these tradeoffs entirely. See
+way Cosmopolitan Libc solves that on AMD is by using SSE to recompile
+the executable at runtime to change `%fs` register accesses into `%gs`
+which takes a millisecond. On ARM, Cosmo uses the `x28` register for TLS
+which can be made safe by passing the `-ffixed-x28` flag when compiling
+GPU modules. Lastly, llamafile uses the `__ms_abi__` attribute so that
+function pointers passed between the application and GPU modules conform
+to the Windows calling convention. Amazingly enough, every compiler we
+tested, including nvcc on Linux and even Objective-C on MacOS, all
+support compiling WIN32 style functions, thus ensuring your llamafile
+will be able to talk to Windows drivers, when it's run on Windows,
+without needing to be recompiled as a separate file for Windows. See
 [cosmopolitan/dlopen.c](https://github.com/jart/cosmopolitan/blob/master/libc/dlopen/dlopen.c)
 for further details.
 

@@ -1,98 +1,113 @@
 #pragma once
 
+#ifdef GGML_USE_HIPBLAS
+#include <hipblas/hipblas.h>
+#include <hip/hip_fp16.h>
+#else
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
+#endif
 
-enum cublasOperation_t {
-  CUBLAS_OP_N = 111,
-  CUBLAS_OP_T = 112,
-  CUBLAS_OP_C = 113,
+enum tinyblasOperation_t {
+  TINYBLAS_OP_N = 111,
+  TINYBLAS_OP_T = 112,
+  TINYBLAS_OP_C = 113,
 };
 
-enum cublasStatus_t {
-  CUBLAS_STATUS_SUCCESS = 0,
-  CUBLAS_STATUS_NOT_SUPPORTED = 7,
+enum tinyblasStatus_t {
+  TINYBLAS_STATUS_SUCCESS,
+  TINYBLAS_STATUS_NOT_INITIALIZED,
+  TINYBLAS_STATUS_ALLOC_FAILED,
+  TINYBLAS_STATUS_INVALID_VALUE,
+  TINYBLAS_STATUS_ARCH_MISMATCH,
+  TINYBLAS_STATUS_MAPPING_ERROR,
+  TINYBLAS_STATUS_EXECUTION_FAILED,
+  TINYBLAS_STATUS_INTERNAL_ERROR,
+  TINYBLAS_STATUS_NOT_SUPPORTED,
 };
 
-enum cublasComputeType_t {
-  CUBLAS_COMPUTE_16F = 150,
+enum tinyblasComputeType_t {
+  TINYBLAS_COMPUTE_16F = 150,
+  TINYBLAS_COMPUTE_32F = 151,
 };
 
-enum cublasGemmAlgo_t {
-  CUBLAS_GEMM_DEFAULT_TENSOR_OP  = 160,
+enum tinyblasGemmAlgo_t {
+  TINYBLAS_GEMM_DEFAULT_TENSOR_OP  = 160,
 };
 
-#define cublasHandle_t cudaStream_t
+#define tinyblasHandle_t cudaStream_t
 
-cublasStatus_t tinyblasSgemm(cublasHandle_t handle,
-                             cublasOperation_t transa,
-                             cublasOperation_t transb,
-                             int m, int n, int k,
-                             const float           *alpha,
-                             const float           *A, int lda,
-                             const float           *B, int ldb,
-                             const float           *beta,
-                             float           *C, int ldc);
+const char *tinyblasGetStatusString(tinyblasStatus_t);
 
-cublasStatus_t tinyblasGemmEx(cublasHandle_t handle,
-                              cublasOperation_t transa,
-                              cublasOperation_t transb,
-                              int m,
-                              int n,
-                              int k,
-                              const void    *alpha,
-                              const void     *A,
-                              cudaDataType_t Atype,
-                              int lda,
-                              const void     *B,
-                              cudaDataType_t Btype,
-                              int ldb,
-                              const void    *beta,
-                              void           *C,
-                              cudaDataType_t Ctype,
-                              int ldc,
-                              cublasComputeType_t computeType,
-                              cublasGemmAlgo_t algo);
+tinyblasStatus_t tinyblasSgemm(tinyblasHandle_t handle,
+                               tinyblasOperation_t transa,
+                               tinyblasOperation_t transb,
+                               int m, int n, int k,
+                               const float           *alpha,
+                               const float           *A, int lda,
+                               const float           *B, int ldb,
+                               const float           *beta,
+                               float           *C, int ldc);
 
-cublasStatus_t tinyblasGemmBatchedEx(cublasHandle_t handle,
-                                     cublasOperation_t transa,
-                                     cublasOperation_t transb,
-                                     int m,
-                                     int n,
-                                     int k,
-                                     const void    *alpha,
-                                     const void     *const Aarray[],
-                                     cudaDataType_t Atype,
-                                     int lda,
-                                     const void     *const Barray[],
-                                     cudaDataType_t Btype,
-                                     int ldb,
-                                     const void    *beta,
-                                     void           *const Carray[],
-                                     cudaDataType_t Ctype,
-                                     int ldc,
-                                     int batchCount,
-                                     cublasComputeType_t computeType,
-                                     cublasGemmAlgo_t algo);
+tinyblasStatus_t tinyblasGemmEx(tinyblasHandle_t handle,
+                                tinyblasOperation_t transa,
+                                tinyblasOperation_t transb,
+                                int m,
+                                int n,
+                                int k,
+                                const void    *alpha,
+                                const void     *A,
+                                cudaDataType_t Atype,
+                                int lda,
+                                const void     *B,
+                                cudaDataType_t Btype,
+                                int ldb,
+                                const void    *beta,
+                                void           *C,
+                                cudaDataType_t Ctype,
+                                int ldc,
+                                tinyblasComputeType_t computeType,
+                                tinyblasGemmAlgo_t algo);
 
-cublasStatus_t tinyblasGemmStridedBatchedEx(cublasHandle_t handle,
-                                            cublasOperation_t transa,
-                                            cublasOperation_t transb,
-                                            int m, int n, int k,
-                                            const void    *pAlpha,
-                                            const void     *A,
-                                            cudaDataType_t Atype,
-                                            int lda,
-                                            long long int strideA,
-                                            const void     *B,
-                                            cudaDataType_t Btype,
-                                            int ldb,
-                                            long long int strideB,
-                                            const void    *pBeta,
-                                            void           *C,
-                                            cudaDataType_t Ctype,
-                                            int ldc,
-                                            long long int strideC,
-                                            int batchCount,
-                                            cublasComputeType_t computeType,
-                                            cublasGemmAlgo_t algo);
+tinyblasStatus_t tinyblasGemmBatchedEx(tinyblasHandle_t handle,
+                                       tinyblasOperation_t transa,
+                                       tinyblasOperation_t transb,
+                                       int m,
+                                       int n,
+                                       int k,
+                                       const void    *alpha,
+                                       const void     *const Aarray[],
+                                       cudaDataType_t Atype,
+                                       int lda,
+                                       const void     *const Barray[],
+                                       cudaDataType_t Btype,
+                                       int ldb,
+                                       const void    *beta,
+                                       void           *const Carray[],
+                                       cudaDataType_t Ctype,
+                                       int ldc,
+                                       int batchCount,
+                                       tinyblasComputeType_t computeType,
+                                       tinyblasGemmAlgo_t algo);
+
+tinyblasStatus_t tinyblasGemmStridedBatchedEx(tinyblasHandle_t handle,
+                                              tinyblasOperation_t transa,
+                                              tinyblasOperation_t transb,
+                                              int m, int n, int k,
+                                              const void    *pAlpha,
+                                              const void     *A,
+                                              cudaDataType_t Atype,
+                                              int lda,
+                                              long long int strideA,
+                                              const void     *B,
+                                              cudaDataType_t Btype,
+                                              int ldb,
+                                              long long int strideB,
+                                              const void    *pBeta,
+                                              void           *C,
+                                              cudaDataType_t Ctype,
+                                              int ldc,
+                                              long long int strideC,
+                                              int batchCount,
+                                              tinyblasComputeType_t computeType,
+                                              tinyblasGemmAlgo_t algo);

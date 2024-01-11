@@ -4,13 +4,13 @@
 #include "llama.h"
 #include "ggml-cuda.h"
 #include "ggml-metal.h"
-#include "runtime.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cerrno>
 #include <cstring>
+#include <climits>
 #include <ctime>
 #include <fstream>
 #include <iterator>
@@ -123,21 +123,20 @@ void process_escapes(std::string& input) {
 
 bool gpt_params_parse(int argc, char ** argv, gpt_params & params) {
     bool result = true;
-#ifndef _LIBCPP_NO_EXCEPTIONS
     try {
-#endif
         if (!gpt_params_parse_ex(argc, argv, params)) {
             gpt_print_usage(argc, argv, gpt_params());
             exit(0);
         }
-#ifndef _LIBCPP_NO_EXCEPTIONS
     }
     catch (const std::invalid_argument & ex) {
         fprintf(stderr, "%s\n", ex.what());
         gpt_print_usage(argc, argv, gpt_params());
         exit(1);
     }
-#endif
+    if (FLAG_gpu == LLAMAFILE_GPU_DISABLE) {
+        params.n_gpu_layers = 0;
+    }
     return result;
 }
 
@@ -148,13 +147,18 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
     const std::string arg_prefix = "--";
     llama_sampling_params & sparams = params.sparams;
 
+    assert(FLAG_gpu == LLAMAFILE_GPU_ERROR);
+    FLAG_gpu = LLAMAFILE_GPU_AUTO;
+
     for (int i = 1; i < argc; i++) {
         arg = argv[i];
         if (arg.compare(0, arg_prefix.size(), arg_prefix) == 0) {
             std::replace(arg.begin(), arg.end(), '_', '-');
         }
 
-        if (arg == "-s" || arg == "--seed") {
+        if (arg == "--cli") {
+            // do nothing
+        } else if (arg == "-s" || arg == "--seed") {
             if (++i >= argc) {
                 invalid_param = true;
                 break;
@@ -231,6 +235,20 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
                 break;
             }
             params.n_ctx = std::stoi(argv[i]);
+        } else if (arg == "--grp-attn-n" || arg == "-gan") {
+            if (++i >= argc) {
+                invalid_param = true;
+                break;
+            }
+
+            params.grp_attn_n = std::stoi(argv[i]);
+        } else if (arg == "--grp-attn-w" || arg == "-gaw") {
+            if (++i >= argc) {
+                invalid_param = true;
+                break;
+            }
+
+            params.grp_attn_w = std::stoi(argv[i]);
         } else if (arg == "--rope-freq-base") {
             if (++i >= argc) {
                 invalid_param = true;
@@ -519,6 +537,22 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
             params.infill = true;
         } else if (arg == "--unsecure") {
             params.unsecure = true;
+        } else if (arg == "--nocompile") {
+            FLAG_nocompile = true;
+        } else if (arg == "--recompile") {
+            FLAG_recompile = true;
+        } else if (arg == "--tinyblas") {
+            FLAG_tinyblas = true;  // undocumented
+        } else if (arg == "--gpu") {
+            if (++i >= argc) {
+                invalid_param = true;
+                break;
+            }
+            FLAG_gpu = llamafile_gpu_parse(argv[i]);
+            if (FLAG_gpu == LLAMAFILE_GPU_ERROR) {
+                fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
+                exit(1);
+            }
         } else if (arg == "-dkvc" || arg == "--dump-kv-cache") {
             params.dump_kv_cache = true;
         } else if (arg == "-nkvo" || arg == "--no-kv-offload") {
@@ -544,6 +578,9 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
                 break;
             }
             params.n_gpu_layers = std::stoi(argv[i]);
+            if (params.n_gpu_layers <= 0) {
+                FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+            }
         } else if (arg == "--gpu-layers-draft" || arg == "-ngld" || arg == "--n-gpu-layers-draft") {
             passed_gpu_flags = true;
             if (++i >= argc) {
@@ -639,9 +676,8 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
             }
             std::stringstream ss(argv[i]);
             llama_token key;
-            char sign = 0;
+            char sign;
             std::string value_str;
-#ifndef _LIBCPP_NO_EXCEPTIONS
             try {
                 if (ss >> key && ss >> sign && std::getline(ss, value_str) && (sign == '+' || sign == '-')) {
                     sparams.logit_bias[key] = std::stof(value_str) * ((sign == '-') ? -1.0f : 1.0f);
@@ -652,19 +688,6 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
                 invalid_param = true;
                 break;
             }
-#else
-            if (ss >> key && ss >> sign && std::getline(ss, value_str) && (sign == '+' || sign == '-')) {
-                errno = 0;
-                sparams.logit_bias[key] = std::stof(value_str) * ((sign == '-') ? -1.0f : 1.0f);
-                if (errno) {
-                    invalid_param = true;
-                    break;
-                }
-            } else {
-                invalid_param = true;
-                break;
-            }
-#endif
         } else if (arg == "-h" || arg == "--help") {
             return false;
 
@@ -767,17 +790,17 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
         // End of Parse args for logging parameters
 #endif // LOG_DISABLE_LOGS
         } else {
-            ThrowInvalidArgument("error: unknown argument: " + arg);
+            throw std::invalid_argument("error: unknown argument: " + arg);
         }
     }
     if (invalid_param) {
-        ThrowInvalidArgument("error: invalid parameter for argument: " + arg);
+        throw std::invalid_argument("error: invalid parameter for argument: " + arg);
     }
     if (params.prompt_cache_all &&
             (params.interactive || params.interactive_first ||
              params.instruct)) {
 
-        ThrowInvalidArgument("error: --prompt-cache-all not supported in interactive mode yet\n");
+        throw std::invalid_argument("error: --prompt-cache-all not supported in interactive mode yet\n");
     }
 
     if (params.escape) {
@@ -793,24 +816,9 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
     if (!params.kv_overrides.empty()) {
         params.kv_overrides.emplace_back(llama_model_kv_override());
         params.kv_overrides.back().key[0] = 0;
-     }
-
-    if (passed_gpu_flags) {
-        // user is tuning their gpu
-        if (!ggml_metal_supported() && !ggml_cuda_supported()) {
-            fprintf(stderr, "warning: GPU offload not supported on this platform; GPU related options will be ignored\n");
-            fprintf(stderr, "warning: you might need to install xcode (macos) or cuda (windows, linux, etc.) check the output above to see why support wasn't linked\n");
-        }
-    } else {
-        // no gpu flags were passed
-        if (ggml_metal_supported()) {
-            // apple metal gpu doesn't require explicit flags to enable
-        } else {
-            // avoid the >1 second cuda startup latency if cuda isn't being used
-            fprintf(stderr, "protip: pass the --n-gpu-layers N flag to link NVIDIA cuBLAS support\n");
-            ggml_cuda_disable();
-        }
     }
+
+    params.n_gpu_layers = llamafile_gpu_layers(params.n_gpu_layers);
 
     return true;
 }
@@ -823,6 +831,7 @@ void gpt_print_usage(int /*argc*/, char ** argv, const gpt_params & params) {
     printf("\n");
     printf("options:\n");
     printf("  -h, --help            show this help message and exit\n");
+    printf("      --version         show version and build info\n");
     printf("  -i, --interactive     run in interactive mode\n");
     printf("  --interactive-first   run in interactive mode and wait for input right away\n");
     printf("  -ins, --instruct      run in instruction mode (use with Alpaca models)\n");
@@ -914,6 +923,7 @@ void gpt_print_usage(int /*argc*/, char ** argv, const gpt_params & params) {
     printf("  --numa                attempt optimizations that help on some NUMA systems\n");
     printf("                        if run without this previously, it is recommended to drop the system page cache before using this\n");
     printf("                        see https://github.com/ggerganov/llama.cpp/issues/1437\n");
+#ifdef LLAMA_SUPPORTS_GPU_OFFLOAD
     printf("  -ngl N, --n-gpu-layers N\n");
     printf("                        number of layers to store in VRAM\n");
     printf("  -ngld N, --n-gpu-layers-draft N\n");
@@ -921,9 +931,16 @@ void gpt_print_usage(int /*argc*/, char ** argv, const gpt_params & params) {
     printf("  -ts SPLIT --tensor-split SPLIT\n");
     printf("                        how to split tensors across multiple GPUs, comma-separated list of proportions, e.g. 3,1\n");
     printf("  -mg i, --main-gpu i   the GPU to use for scratch and small tensors\n");
+#ifdef GGML_USE_CUBLAS
     printf("  -nommq, --no-mul-mat-q\n");
     printf("                        use " GGML_CUBLAS_NAME " instead of custom mul_mat_q " GGML_CUDA_NAME " kernels.\n");
     printf("                        Not recommended since this is both slower and uses more VRAM.\n");
+#endif // GGML_USE_CUBLAS
+#endif
+    printf("  -gan N, --grp-attn-n N\n");
+    printf("                        group-attention factor (default: %d)\n", params.grp_attn_n);
+    printf("  -gaw N, --grp-attn-w N\n");
+    printf("                        group-attention width (default: %.1f)\n", (double)params.grp_attn_w);
     printf("  --verbose-prompt      print prompt before generation\n");
     printf("  -dkvc, --dump-kv-cache\n");
     printf("                        verbose print of the KV cache\n");
@@ -940,10 +957,9 @@ void gpt_print_usage(int /*argc*/, char ** argv, const gpt_params & params) {
     printf("  -m FNAME, --model FNAME\n");
     printf("                        model path (default: %s)\n", params.model.c_str());
     printf("  -md FNAME, --model-draft FNAME\n");
-    printf("                        draft model for speculative decoding (default: %s)\n", params.model.c_str());
+    printf("                        draft model for speculative decoding\n");
     printf("  -ld LOGDIR, --logdir LOGDIR\n");
     printf("                        path under which to save YAML logs (no logging if unset)\n");
-    printf("  --unsecure            disables pledge() sandboxing on Linux and OpenBSD\n");
     printf("  --override-kv KEY=TYPE:VALUE\n");
     printf("                        advanced option to override model metadata by key. may be specified multiple times.\n");
     printf("                        types: int, float, bool. example: --override-kv tokenizer.ggml.add_bos_token=bool:false\n");
@@ -1069,7 +1085,7 @@ static ggml_type kv_cache_type_from_str(const std::string & s) {
         return GGML_TYPE_Q5_1;
     }
 
-    ThrowRuntimeError("Invalid cache type: " + s);
+    throw std::runtime_error("Invalid cache type: " + s);
 }
 
 struct llama_context_params llama_context_params_from_gpt_params(const gpt_params & params) {
@@ -1334,7 +1350,7 @@ std::string get_sortable_timestamp() {
 
     const int64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
         current_time.time_since_epoch() % 1000000000).count();
-    char timestamp_ns[21];
+    char timestamp_ns[11];
     snprintf(timestamp_ns, 11, "%09" PRId64, ns);
 
     return std::string(timestamp_no_ns) + "." + std::string(timestamp_ns);
@@ -1348,6 +1364,7 @@ void dump_non_result_info_yaml(FILE * stream, const gpt_params & params, const l
     fprintf(stream, "build_number: %d\n",        LLAMA_BUILD_NUMBER);
     fprintf(stream, "cpu_has_arm_fma: %s\n",     ggml_cpu_has_arm_fma()     ? "true" : "false");
     fprintf(stream, "cpu_has_avx: %s\n",         ggml_cpu_has_avx()         ? "true" : "false");
+    fprintf(stream, "cpu_has_avx_vnni: %s\n",    ggml_cpu_has_avx_vnni()    ? "true" : "false");
     fprintf(stream, "cpu_has_avx2: %s\n",        ggml_cpu_has_avx2()        ? "true" : "false");
     fprintf(stream, "cpu_has_avx512: %s\n",      ggml_cpu_has_avx512()      ? "true" : "false");
     fprintf(stream, "cpu_has_avx512_vbmi: %s\n", ggml_cpu_has_avx512_vbmi() ? "true" : "false");

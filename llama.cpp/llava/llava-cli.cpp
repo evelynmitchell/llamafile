@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
+#include <unistd.h>
+#include <signal.h>
 
 static bool eval_tokens(struct llama_context * ctx_llama, std::vector<llama_token> tokens, int n_batch, int * n_past) {
     int N = (int) tokens.size();
@@ -114,6 +116,16 @@ struct llava_context {
     struct llama_model * model = NULL;
 };
 
+struct llava_context * volatile g_ctx;
+
+static void sigint_handler(int signo) {
+    if (signo == SIGINT) {
+        printf("\n");
+        llama_print_timings(g_ctx->ctx_llama);
+        _exit(128 + SIGINT);
+    }
+}
+
 static void show_additional_info(int /*argc*/, char ** argv) {
     fprintf(stderr, "\n example usage: %s -m <llava-v1.5-7b/ggml-model-q5_k.gguf> --mmproj <llava-v1.5-7b/mmproj-model-f16.gguf> --image <path/to/an/image.jpg> [--temp 0.1] [-p \"describe the image in detail.\"]\n", argv[0]);
     fprintf(stderr, "  note: a lower temperature value like 0.1 is recommended for better quality.\n");
@@ -126,7 +138,7 @@ static struct llava_image_embed * load_image(llava_context * ctx_llava, gpt_para
     auto prompt = params->prompt;
     if (prompt_contains_image(prompt)) {
         if (!params->image.empty()) {
-          fprintf(stderr, "using base64 encoded image instead of command line image path\n");
+            tinylogf("using base64 encoded image instead of command line image path\n");
         }
         embed = llava_image_embed_make_with_prompt_base64(ctx_llava->ctx_clip, params->n_threads, prompt);
         if (!embed) {
@@ -149,15 +161,16 @@ static void process_prompt(struct llava_context * ctx_llava, struct llava_image_
     int n_past = 0;
 
     const int max_tgt_len = params->n_predict < 0 ? 256 : params->n_predict;
+    const bool add_bos = llama_should_add_bos_token(llama_get_model(ctx_llava->ctx_llama));
 
     // llava chat format is "<system_prompt>\nUSER:<image_embeddings>\n<textual_prompt>\nASSISTANT:"
-    eval_string(ctx_llava->ctx_llama, "A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions.\nUSER:", params->n_batch, &n_past, true);
+    eval_string(ctx_llava->ctx_llama, "A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions.\nUSER:", params->n_batch, &n_past, add_bos);
     llava_eval_image_embed(ctx_llava->ctx_llama, image_embed, params->n_batch, &n_past);
     eval_string(ctx_llava->ctx_llama, (prompt + "\nASSISTANT:").c_str(), params->n_batch, &n_past, false);
 
     // generate the response
 
-    fprintf(stderr, "\n");
+    tinylogf("\n");
 
     struct llama_sampling_context * ctx_sampling = llama_sampling_init(params->sparams);
 
@@ -230,9 +243,9 @@ int llava_cli(int argc, char ** argv) {
         show_additional_info(argc, argv);
         return 1;
     }
-    if (params.mmproj.empty() || (params.image.empty() && !prompt_contains_image(params.prompt))) {
-        gpt_print_usage(argc, argv, params);
-        show_additional_info(argc, argv);
+
+    if (params.mmproj.empty()) {
+        fprintf(stderr, "%s: fatal error: --mmproj must also be passed when an --image is specified in cli mode\n", argv[0]);
         return 1;
     }
 
@@ -241,8 +254,18 @@ int llava_cli(int argc, char ** argv) {
         fprintf(stderr, "%s: error: failed to init llava\n", __func__);
         return 1;
     }
+    g_ctx = ctx_llava;
+
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
 
     auto image_embed = load_image(ctx_llava, &params);
+    if (!image_embed) {
+        return 1;
+    }
 
     // process the prompt
     process_prompt(ctx_llava, image_embed, &params, params.prompt);

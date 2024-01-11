@@ -2,8 +2,8 @@
 #── vi: set noet ft=make ts=8 sw=8 fenc=utf-8 :vi ────────────────────┘
 
 LINK.o = $(CXX) $(CCFLAGS) $(LDFLAGS)
-COMPILE.c = $(CC) $(CCFLAGS) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-COMPILE.cc = $(CXX) $(CCFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
+COMPILE.c = $(CC) $(CCFLAGS) $(CFLAGS) $(CPPFLAGS_) $(CPPFLAGS) $(TARGET_ARCH) -c
+COMPILE.cc = $(CXX) $(CCFLAGS) $(CXXFLAGS) $(CPPFLAGS_) $(CPPFLAGS) $(TARGET_ARCH) -c
 
 o/$(MODE)/%.a:
 	$(AR) $(ARFLAGS) $@ $^
@@ -22,6 +22,11 @@ o/$(MODE)/%.o: %.cpp $(COSMOCC)
 
 o/$(MODE)/%: o/$(MODE)/%.o
 	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+
+.PRECIOUS: %.1.asc
+%.1.asc: %.1
+	-MANWIDTH=80 MAN_KEEP_FORMATTING=1 man $< >$@.tmp && mv -f $@.tmp $@
+	@rm -f $@.tmp
 
 o/$(MODE)/%.zip.o: % $(COSMOCC)
 	@mkdir -p $(dir $@)/.aarch64

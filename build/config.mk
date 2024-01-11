@@ -2,7 +2,7 @@
 #── vi: set noet ft=make ts=8 sw=8 fenc=utf-8 :vi ────────────────────┘
 
 PREFIX = /usr/local
-COSMOCC = cosmocc/3.1.3
+COSMOCC = .cosmocc/3.2.4
 TOOLCHAIN = $(COSMOCC)/bin/cosmo
 
 AR = $(TOOLCHAIN)ar
@@ -13,9 +13,9 @@ MKDEPS = $(COSMOCC)/bin/mkdeps
 INSTALL = install
 
 ARFLAGS = rcsD
-CCFLAGS = -g -O3
+CCFLAGS = -g -O3 -fexceptions
 TARGET_ARCH = -Xx86_64-mssse3
-CPPFLAGS += -iquote. -mcosmo
+CPPFLAGS_ = -iquote. -mcosmo -DGGML_MULTIPLATFORM
 
 TMPDIR = o//tmp
 IGNORE := $(shell mkdir -p $(TMPDIR))
@@ -33,7 +33,7 @@ endif
 endif
 
 # make build more deterministic
-LC_ALL = C
+LC_ALL = C.UTF-8
 SOURCE_DATE_EPOCH = 0
 export MODE
 export TMPDIR
@@ -50,5 +50,5 @@ clean:; rm -rf o
 .PHONY: distclean
 distclean:; rm -rf o cosmocc
 
-cosmocc/3.1.3:
-	build/download-cosmocc.sh $@ 3.1.3 7470f05ef28f1941eb655c0359de08118023ba75767c2c47b398569a16397504
+.cosmocc/3.2.4:
+	build/download-cosmocc.sh $@ 3.2.4 d2fa6dbf6f987310494581deff5b915dbdc5ca701f20f7613bb0dcf1de2ee511

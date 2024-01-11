@@ -31,7 +31,7 @@
 #define die_fmt(fmt, ...) do { fprintf(stderr, "error: " fmt "\n", __VA_ARGS__); exit(1); } while (0)
 
 #define print_build_info() do {  \
-    fprintf(stderr, "%s: llamafile version " LLAMAFILE_VERSION_STRING "\n", __func__, LLAMA_BUILD_NUMBER, LLAMA_COMMIT);  \
+        tinylog(__func__, ": llamafile version " LLAMAFILE_VERSION_STRING "\n", NULL); \
 } while(0)
 
 // build info
@@ -45,16 +45,25 @@ extern char const *LLAMA_BUILD_TARGET;
 //
 int32_t get_num_physical_cores();
 
+static inline int pick_default_thread_count() {
+    int n = get_num_physical_cores();
+    // last thing we want is to have 63 threads on AMD EPYC fighting to
+    // acquire a spinlock while the 64th thread finishes evaluating the
+    // last item of work in a segment of the model's computation graph.
+    if (n > 12) n = 12;
+    return n;
+}
+
 struct gpt_params {
     uint32_t seed                           = -1;    // RNG seed
 
-    int32_t n_threads                       = get_num_physical_cores();
+    int32_t n_threads                       = pick_default_thread_count();
     int32_t n_threads_batch                 = -1;    // number of threads to use for batch processing (-1 = use n_threads)
     int32_t n_predict                       = -1;    // new tokens to predict
     int32_t n_ctx                           = 512;   // context size
     int32_t n_batch                         = 512;   // batch size for prompt processing (must be >=32 to use BLAS)
     int32_t n_keep                          = 0;     // number of tokens to keep from initial prompt
-    int32_t n_draft                         = 16;    // number of tokens to draft during speculative decoding
+    int32_t n_draft                         = 8;     // number of tokens to draft during speculative decoding
     int32_t n_chunks                        = -1;    // max number of chunks to process (-1 = unlimited)
     int32_t n_parallel                      = 1;     // number of parallel sequences to decode
     int32_t n_sequences                     = 1;     // number of sequences to decode
@@ -65,6 +74,8 @@ struct gpt_params {
     int32_t main_gpu                        = 0;     // the GPU that is used for scratch and small tensors
     float   tensor_split[LLAMA_MAX_DEVICES] = {0};   // how split tensors should be distributed across GPUs
     int32_t n_beams                         = 0;     // if non-zero then use beam search of given width.
+    int32_t grp_attn_n                      = 1;     // group-attention factor
+    int32_t grp_attn_w                      = 512;   // group-attention width
     float   rope_freq_base                  = 0.0f;  // RoPE base frequency
     float   rope_freq_scale                 = 0.0f;  // RoPE frequency scaling factor
     float   yarn_ext_factor                 = -1.0f; // YaRN extrapolation mix factor
@@ -245,3 +256,4 @@ void dump_kv_cache_view(const llama_kv_cache_view & view, int row_size = 80);
 
 // Dump the KV cache view showing individual sequences in each cell (long output).
 void dump_kv_cache_view_seqs(const llama_kv_cache_view & view, int row_size = 40);
+

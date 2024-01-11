@@ -41,13 +41,6 @@ static const std::vector<struct quant_option> QUANT_OPTIONS = {
 };
 
 
-static bool is_integer_str(const char *s) {
-    if (*s == '-') ++s;
-    if (!*s) return false;
-    while (isdigit(*s)) ++s;
-    return !*s;
-}
-
 static bool try_parse_ftype(const std::string & ftype_str_in, llama_ftype & ftype, std::string & ftype_str_out) {
     std::string ftype_str;
 
@@ -61,7 +54,7 @@ static bool try_parse_ftype(const std::string & ftype_str_in, llama_ftype & ftyp
             return true;
         }
     }
-    if (is_integer_str(ftype_str.c_str())) {
+    try {
         int ftype_int = std::stoi(ftype_str);
         for (auto & it : QUANT_OPTIONS) {
             if (it.ftype == ftype_int) {
@@ -70,6 +63,9 @@ static bool try_parse_ftype(const std::string & ftype_str_in, llama_ftype & ftyp
                 return true;
             }
         }
+    }
+    catch (...) {
+        // stoi failed
     }
     return false;
 }
@@ -96,9 +92,17 @@ static void usage(const char * executable) {
 }
 
 int main(int argc, char ** argv) {
-    if (argc == 2 && !strcmp(argv[1], "--version")) {
-        printf("llamafile v" LLAMAFILE_VERSION_STRING " quantize\n");
-        exit(0);
+
+    if (llamafile_has(argv, "--version")) {
+        puts("llamafile-quantize v" LLAMAFILE_VERSION_STRING);
+        return 0;
+    }
+
+    if (llamafile_has(argv, "-h") ||
+        llamafile_has(argv, "-help") ||
+        llamafile_has(argv, "--help")) {
+        llamafile_help("/zip/llama.cpp/quantize/quantize.1.asc");
+        __builtin_unreachable();
     }
 
     llamafile_init();
@@ -169,17 +173,13 @@ int main(int argc, char ** argv) {
 
     // parse nthreads
     if (argc > arg_idx) {
-#ifndef _LIBCPP_NO_EXCEPTIONS
         try {
-#endif
             params.nthread = std::stoi(argv[arg_idx]);
-#ifndef _LIBCPP_NO_EXCEPTIONS
         }
         catch (const std::exception & e) {
             fprintf(stderr, "%s: invalid nthread '%s' (%s)\n", __func__, argv[arg_idx], e.what());
             return 1;
         }
-#endif
     }
 
     print_build_info();
