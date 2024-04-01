@@ -1,4 +1,4 @@
-static void ggml_vec_dot_q8_0_q8_0(const int n, float * restrict s, const void * restrict vx, const void * restrict vy) {
+static void ggml_vec_dot_q8_0_q8_0(const int n, float * restrict s, size_t bs, const void * restrict vx, size_t bx, const void * restrict vy, size_t by, int nrc) {
     const int qk = QK8_0;
     const int nb = n / qk;
 
@@ -47,11 +47,7 @@ static void ggml_vec_dot_q8_0_q8_0(const int n, float * restrict s, const void *
     // Main loop
     for (int i = 0; i < nb; ++i) {
         // Compute combined scale for the block
-#ifdef __AVX2__
-        const __m256 d = _mm256_set1_ps(GGML_FP16_TO_FP32__F16C(x[i].d) * GGML_FP16_TO_FP32__F16C(y[i].d));
-#else
         const __m256 d = _mm256_set1_ps(GGML_FP16_TO_FP32(x[i].d) * GGML_FP16_TO_FP32(y[i].d));
-#endif
         __m256i bx = _mm256_loadu_si256((const __m256i *)x[i].qs);
         __m256i by = _mm256_loadu_si256((const __m256i *)y[i].qs);
 
@@ -62,11 +58,7 @@ static void ggml_vec_dot_q8_0_q8_0(const int n, float * restrict s, const void *
 #endif
 
         // Multiply q with scale and accumulate
-#if defined(__AVX2__)
-        acc = _mm256_fmadd_ps( d, q, acc );
-#else
         acc = _mm256_add_ps( _mm256_mul_ps( d, q ), acc );
-#endif
     }
 
     *s = hsum_float_8(acc);

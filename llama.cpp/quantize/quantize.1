@@ -76,6 +76,8 @@ The following quantization types are available:
 .It
    7 Q8_0   6.70G +0.0004 ppl @ LLaMA-v1-7B
 .It
+  31 BF16   Google Brain Floating Point
+.It
    1 F16    13.00G @ 7B
 .It
    0 F32    26.00G @ 7B
@@ -84,6 +86,7 @@ COPY Only copy tensors, no quantizing.
 .El
 .Sh SEE ALSO
 .Xr llamafile 1 ,
+.Xr llamafile-imatrix 1 ,
 .Xr llamafile-perplexity 1 ,
 .Xr llava-quantize 1 ,
 .Xr zipalign 1 ,

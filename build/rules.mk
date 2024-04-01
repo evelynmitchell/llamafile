@@ -23,6 +23,13 @@ o/$(MODE)/%.o: %.cpp $(COSMOCC)
 o/$(MODE)/%: o/$(MODE)/%.o
 	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
+o/$(MODE)/%.com: o/$(MODE)/%.o
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+
+%.runs: %
+	$<
+	@touch $@
+
 .PRECIOUS: %.1.asc
 %.1.asc: %.1
 	-MANWIDTH=80 MAN_KEEP_FORMATTING=1 man $< >$@.tmp && mv -f $@.tmp $@

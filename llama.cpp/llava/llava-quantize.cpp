@@ -5,6 +5,7 @@
 #include "llamafile/version.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "llamafile/llamafile.h"
 #include <string.h>
 
 int main(int argc, char *argv[]) {
@@ -21,7 +22,6 @@ int main(int argc, char *argv[]) {
         __builtin_unreachable();
     }
 
-    llamafile_init();
     llamafile_check_cpu();
 
     if (argc != 4) {

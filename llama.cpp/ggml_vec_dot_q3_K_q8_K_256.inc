@@ -1,4 +1,4 @@
-static void ggml_vec_dot_q3_K_q8_K(const int n, float * restrict s, const void * restrict vx, const void * restrict vy) {
+static void ggml_vec_dot_q3_K_q8_K(const int n, float * restrict s, size_t bs, const void * restrict vx, size_t bx, const void * restrict vy, size_t by, int nrc) {
     assert(n % QK_K == 0);
 
     const uint32_t kmask1 = 0x03030303;
@@ -115,7 +115,7 @@ static void ggml_vec_dot_q3_K_q8_K(const int n, float * restrict s, const void *
 
     for (int i = 0; i < nb; ++i) {
 
-        const float d = y[i].d * GGML_FP16_TO_FP32__F16C(x[i].d);
+        const float d = y[i].d * GGML_FP16_TO_FP32(x[i].d);
 
         const uint8_t * restrict q3 = x[i].qs;
         const int8_t  * restrict q8 = y[i].qs;

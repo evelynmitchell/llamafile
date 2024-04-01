@@ -16,28 +16,30 @@
 // limitations under the License.
 
 #include "llamafile.h"
+#include "llamafile/log.h"
 #include <cosmo.h>
-#include <spawn.h>
 #include <errno.h>
+#include <signal.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <signal.h>
 #include <sys/wait.h>
-#include "llamafile/log.h"
+#include <unistd.h>
 
 static volatile bool g_timed_out;
+
+static void finish(void) {
+    if (!IsWindows())
+        _exit(0);
+}
 
 static void handle_timeout(int sig) {
     g_timed_out = true;
 }
 
-static void report_failure(const char *url,
-                           const char *cmd,
-                           const char *reason) {
-    tinylog("failed to open ", url, " in a browser tab using ", cmd,
-            ": ", reason, "\n", NULL);
+static void report_failure(const char *url, const char *cmd, const char *reason) {
+    tinylog("failed to open ", url, " in a browser tab using ", cmd, ": ", reason, "\n", NULL);
 }
 
 /**
@@ -47,7 +49,8 @@ void llamafile_launch_browser(const char *url) {
 
     // perform this task from a subprocess so it doesn't block server
     tinylog("opening browser tab... (pass --nobrowser to disable)\n", NULL);
-    switch (fork()) {
+    if (!IsWindows()) {
+        switch (fork()) {
         case 0:
             break;
         default:
@@ -55,6 +58,7 @@ void llamafile_launch_browser(const char *url) {
         case -1:
             perror("fork");
             return;
+        }
     }
 
     // determine which command opens browser tab
@@ -78,7 +82,7 @@ void llamafile_launch_browser(const char *url) {
     posix_spawnattr_destroy(&sa);
     if (err) {
         report_failure(url, cmd, strerror(err));
-        _exit(0);
+        return finish();
     }
 
     // kill command if it takes more than three seconds
@@ -90,25 +94,24 @@ void llamafile_launch_browser(const char *url) {
     sigaction(SIGALRM, &hand, 0);
     alarm(3);
 
-    // wait for tab to finish opening
+    // wait for tab to return finish opening
     // the browser will still be running after this completes
     int ws;
     while (waitpid(pid, &ws, 0) == -1) {
         if (errno != EINTR) {
             report_failure(url, cmd, strerror(errno));
             kill(pid, SIGKILL);
-            _exit(0);
+            return finish();
         }
         if (g_timed_out) {
             report_failure(url, cmd, "process timed out");
             kill(pid, SIGKILL);
-            _exit(0);
+            return finish();
         }
     }
-    if (ws) {
+    if (ws)
         report_failure(url, cmd, "process exited with non-zero status");
-    }
 
     // we're done
-    _exit(0);
+    return finish();
 }

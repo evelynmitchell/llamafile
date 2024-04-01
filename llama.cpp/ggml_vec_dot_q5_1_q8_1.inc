@@ -1,4 +1,4 @@
-static void ggml_vec_dot_q5_1_q8_1(const int n, float * restrict s, const void * restrict vx, const void * restrict vy) {
+static void ggml_vec_dot_q5_1_q8_1(const int n, float * restrict s, size_t bs, const void * restrict vx, size_t bx, const void * restrict vy, size_t by, int nrc) {
     const int qk = QK8_1;
     const int nb = n / qk;
 
@@ -156,9 +156,9 @@ static void ggml_vec_dot_q5_1_q8_1(const int n, float * restrict s, const void *
 
     // Main loop
     for (int i = 0; i < nb; i++) {
-        const __m256 dx = _mm256_set1_ps(GGML_FP16_TO_FP32__F16C(x[i].d));
+        const __m256 dx = _mm256_set1_ps(GGML_FP16_TO_FP32(x[i].d));
 
-        summs += GGML_FP16_TO_FP32__F16C(x[i].m) * y[i].s;
+        summs += GGML_FP16_TO_FP32(x[i].m) * y[i].s;
 
         __m256i bx = bytes_from_nibbles_32_avx2(x[i].qs);
         __m256i bxhi = bytes_from_bits_32_avx2(x[i].qh);

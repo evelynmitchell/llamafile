@@ -1,7 +1,7 @@
 #ifndef LLAMAFILE_H_
 #define LLAMAFILE_H_
-#include <stdio.h>
 #include <stdbool.h>
+#include <stdio.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +28,10 @@ int llamafile_is_file_newer_than(const char *, const char *);
 void llamafile_schlep(const void *, size_t);
 void llamafile_get_app_dir(char *, size_t);
 void llamafile_launch_browser(const char *);
+int llamafile_get_math_cpu_count(void);
+
+extern bool FLAG_unsecure;
+extern const bool have_avx512bf16;
 
 #define LLAMAFILE_GPU_ERROR -2
 #define LLAMAFILE_GPU_DISABLE -1
@@ -39,10 +43,15 @@ extern int FLAG_gpu;
 extern bool FLAG_tinyblas;
 extern bool FLAG_nocompile;
 extern bool FLAG_recompile;
+bool llamafile_has_gpu(void);
 int llamafile_gpu_layers(int);
-bool llamafile_gpu_supported(void);
+bool llamafile_has_cuda(void);
+bool llamafile_has_metal(void);
 int llamafile_gpu_parse(const char *);
 const char *llamafile_describe_gpu(void);
+
+bool llamafile_sgemm(int, int, int, const void *, int, const void *, int, void *, int, int, int,
+                     int, int, int, int);
 
 #ifdef __cplusplus
 }

@@ -9,6 +9,7 @@
 
 #include "sampling.h"
 #include "llamafile/version.h"
+#include "llamafile/llamafile.h"
 
 #define LOG_NO_FILE_LINE_FUNCTION
 #include "log.h"
@@ -40,56 +41,59 @@ extern char const *LLAMA_COMMIT;
 extern char const *LLAMA_COMPILER;
 extern char const *LLAMA_BUILD_TARGET;
 
+struct llama_control_vector_load_info;
+
+int32_t get_num_physical_cores();
+
 //
 // CLI argument parsing
 //
-int32_t get_num_physical_cores();
-
-static inline int pick_default_thread_count() {
-    int n = get_num_physical_cores();
-    // last thing we want is to have 63 threads on AMD EPYC fighting to
-    // acquire a spinlock while the 64th thread finishes evaluating the
-    // last item of work in a segment of the model's computation graph.
-    if (n > 12) n = 12;
-    return n;
-}
 
 struct gpt_params {
-    uint32_t seed                           = -1;    // RNG seed
+    uint32_t seed                 = LLAMA_DEFAULT_SEED; // RNG seed
 
-    int32_t n_threads                       = pick_default_thread_count();
-    int32_t n_threads_batch                 = -1;    // number of threads to use for batch processing (-1 = use n_threads)
-    int32_t n_predict                       = -1;    // new tokens to predict
-    int32_t n_ctx                           = 512;   // context size
-    int32_t n_batch                         = 512;   // batch size for prompt processing (must be >=32 to use BLAS)
-    int32_t n_keep                          = 0;     // number of tokens to keep from initial prompt
-    int32_t n_draft                         = 8;     // number of tokens to draft during speculative decoding
-    int32_t n_chunks                        = -1;    // max number of chunks to process (-1 = unlimited)
-    int32_t n_parallel                      = 1;     // number of parallel sequences to decode
-    int32_t n_sequences                     = 1;     // number of sequences to decode
-    float   p_accept                        = 0.5f;  // speculative decoding accept probability
-    float   p_split                         = 0.1f;  // speculative decoding split probability
-    int32_t n_gpu_layers                    = -1;    // number of layers to store in VRAM (-1 - use default)
-    int32_t n_gpu_layers_draft              = -1;    // number of layers to store in VRAM for the draft model (-1 - use default)
-    int32_t main_gpu                        = 0;     // the GPU that is used for scratch and small tensors
-    float   tensor_split[LLAMA_MAX_DEVICES] = {0};   // how split tensors should be distributed across GPUs
-    int32_t n_beams                         = 0;     // if non-zero then use beam search of given width.
-    int32_t grp_attn_n                      = 1;     // group-attention factor
-    int32_t grp_attn_w                      = 512;   // group-attention width
-    float   rope_freq_base                  = 0.0f;  // RoPE base frequency
-    float   rope_freq_scale                 = 0.0f;  // RoPE frequency scaling factor
-    float   yarn_ext_factor                 = -1.0f; // YaRN extrapolation mix factor
-    float   yarn_attn_factor                = 1.0f;  // YaRN magnitude scaling factor
-    float   yarn_beta_fast                  = 32.0f; // YaRN low correction dim
-    float   yarn_beta_slow                  = 1.0f;  // YaRN high correction dim
-    int32_t yarn_orig_ctx                   = 0;     // YaRN original context length
-    int8_t  rope_scaling_type               = LLAMA_ROPE_SCALING_UNSPECIFIED; // TODO: better to be int32_t for alignment
-                                                                              //       pinging @cebtenzzre
+    int32_t n_threads             = llamafile_get_math_cpu_count();
+    int32_t n_threads_draft       = -1;
+    int32_t n_threads_batch       = -1;    // number of threads to use for batch processing (-1 = use n_threads)
+    int32_t n_threads_batch_draft = -1;
+    int32_t n_predict             = -1;    // new tokens to predict
+    int32_t n_ctx                 = 512;   // context size
+    int32_t n_batch               = 2048;  // logical batch size for prompt processing (must be >=32 to use BLAS)
+    int32_t n_ubatch              = 512;   // physical batch size for prompt processing (must be >=32 to use BLAS)
+    int32_t n_keep                = 0;     // number of tokens to keep from initial prompt
+    int32_t n_draft               = 5;     // number of tokens to draft during speculative decoding
+    int32_t n_chunks              = -1;    // max number of chunks to process (-1 = unlimited)
+    int32_t n_parallel            = 1;     // number of parallel sequences to decode
+    int32_t n_sequences           = 1;     // number of sequences to decode
+    float   p_split               = 0.1f;  // speculative decoding split probability
+    int32_t n_gpu_layers          = -1;    // number of layers to store in VRAM (-1 - use default)
+    int32_t n_gpu_layers_draft    = -1;    // number of layers to store in VRAM for the draft model (-1 - use default)
+    llama_split_mode split_mode   = LLAMA_SPLIT_MODE_LAYER; // how to split the model across GPUs
+    int32_t main_gpu              = 0;     // the GPU that is used for scratch and small tensors
+    float   tensor_split[128]     = {0};   // how split tensors should be distributed across GPUs
+    int32_t n_beams               = 0;     // if non-zero then use beam search of given width.
+    int32_t grp_attn_n            = 1;     // group-attention factor
+    int32_t grp_attn_w            = 512;   // group-attention width
+    int32_t n_print               = -1;    // print token count every n tokens (-1 = disabled)
+    float   rope_freq_base        = 0.0f;  // RoPE base frequency
+    float   rope_freq_scale       = 0.0f;  // RoPE frequency scaling factor
+    float   yarn_ext_factor       = -1.0f; // YaRN extrapolation mix factor
+    float   yarn_attn_factor      = 1.0f;  // YaRN magnitude scaling factor
+    float   yarn_beta_fast        = 32.0f; // YaRN low correction dim
+    float   yarn_beta_slow        = 1.0f;  // YaRN high correction dim
+    int32_t yarn_orig_ctx         = 0;     // YaRN original context length
+    float   defrag_thold          = -1.0f; // KV cache defragmentation threshold
+
+    ggml_numa_strategy numa = GGML_NUMA_STRATEGY_DISABLED;
+
+    llama_rope_scaling_type rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED;
+    llama_pooling_type      pooling_type      = LLAMA_POOLING_TYPE_UNSPECIFIED; // pooling type for embeddings
 
     // // sampling parameters
     struct llama_sampling_params sparams;
 
     std::string model             = "models/7B/ggml-model-f16.gguf"; // model path
+    std::string model_url         = ""; // model url to download
     std::string model_draft       = "";                              // draft model for speculative decoding
     std::string model_alias       = "unknown"; // model alias
     std::string prompt            = "";
@@ -99,12 +103,18 @@ struct gpt_params {
     std::string input_suffix      = "";  // string to suffix user inputs with
     std::vector<std::string> antiprompt; // string upon seeing which more user input is prompted
     std::string logdir            = "";  // directory in which to save YAML log files
+    std::string logits_file       = "";  // file for saving *all* logits
 
     std::vector<llama_model_kv_override> kv_overrides;
 
     // TODO: avoid tuple, use struct
     std::vector<std::tuple<std::string, float>> lora_adapter; // lora adapter path with user defined scale
     std::string lora_base  = "";                              // base model path for the lora adapter
+
+    std::vector<llama_control_vector_load_info> control_vectors; // control vector with user defined scale
+
+    int32_t control_vector_layer_start = -1; // layer range for control vector
+    int32_t control_vector_layer_end   = -1; // layer range for control vector
 
     int  ppl_stride        = 0;     // stride for perplexity calculations. If left at 0, the pre-existing approach will be used.
     int  ppl_output_type   = 0;     // = 0 -> ppl output is as usual, = 1 -> ppl output is num_tokens, ppl, one per line
@@ -113,7 +123,14 @@ struct gpt_params {
     bool   hellaswag       = false; // compute HellaSwag score over random tasks from datafile supplied in prompt
     size_t hellaswag_tasks = 400;   // number of tasks to use when computing the HellaSwag score
 
-    bool mul_mat_q         = true;  // if true, use mul_mat_q kernels instead of cuBLAS
+    bool   winogrande      = false; // compute Winogrande score over random tasks from datafile supplied in prompt
+    size_t winogrande_tasks= 0;     // number of tasks to use when computing the Winogrande score. If 0, all tasks will be computed
+
+    bool   multiple_choice = false; // compute TruthfulQA score over random tasks from datafile supplied in prompt
+    size_t multiple_choice_tasks = 0;     // number of tasks to use when computing the TruthfulQA score. If 0, all tasks will be computed
+
+    bool   kl_divergence   = false; // compute KL-divergence
+
     bool random_prompt     = false; // do not randomize prompt if none provided
     bool use_color         = false; // use color to distinguish generations and inputs
     bool interactive       = false; // interactive mode
@@ -134,14 +151,12 @@ struct gpt_params {
     bool logits_all        = false; // return logits for all tokens in the batch
     bool use_mmap          = true;  // use mmap for faster loads
     bool use_mlock         = false; // use mlock to keep model in memory
-    bool numa              = false; // attempt optimizations that help on some NUMA systems
     bool verbose_prompt    = false; // print prompt tokens before generation
-    bool silent_prompt     = false; // don't print prompt to stdout
+    bool display_prompt    = true;  // print prompt before generation
     bool infill            = false; // use infill mode
     bool dump_kv_cache     = false; // dump the KV cache contents for debugging purposes
     bool no_kv_offload     = false; // disable KV offloading
 
-    bool unsecure            = false; // disable pledge() sandboxing
     std::string cache_type_k = "f16"; // KV cache data type for the K
     std::string cache_type_v = "f16"; // KV cache data type for the V
 
@@ -163,10 +178,13 @@ std::string gpt_random_prompt(std::mt19937 & rng);
 void process_escapes(std::string& input);
 
 //
-// String parsing
+// String utils
 //
 
-std::string parse_samplers_input(std::string input);
+std::vector<llama_sampler_type> sampler_types_from_names(const std::vector<std::string> & names, bool allow_alt_names);
+std::vector<llama_sampler_type> sampler_types_from_chars(const std::string & names_string);
+std::vector<std::string> string_split(std::string input, char separator);
+std::string sampler_type_to_name_string(llama_sampler_type sampler_type);
 
 //
 // Model utils
@@ -177,6 +195,9 @@ std::tuple<struct llama_model *, struct llama_context *> llama_init_from_gpt_par
 
 struct llama_model_params   llama_model_params_from_gpt_params  (const gpt_params & params);
 struct llama_context_params llama_context_params_from_gpt_params(const gpt_params & params);
+
+struct llama_model * llama_load_model_from_url(const char * model_url, const char * path_model,
+                                                         struct llama_model_params     params);
 
 // Batch utils
 
@@ -257,3 +278,31 @@ void dump_kv_cache_view(const llama_kv_cache_view & view, int row_size = 80);
 // Dump the KV cache view showing individual sequences in each cell (long output).
 void dump_kv_cache_view_seqs(const llama_kv_cache_view & view, int row_size = 40);
 
+//
+// Embedding utils
+//
+
+void llama_embd_normalize(const float * inp, float * out, int n);
+
+float llama_embd_similarity_cos(const float * embd1, const float * embd2, int n);
+
+//
+// Control vector utils
+//
+
+struct llama_control_vector_data {
+    int n_embd;
+
+    // stores data for layers [1, n_layer] where n_layer = data.size() / n_embd
+    std::vector<float> data;
+};
+
+struct llama_control_vector_load_info {
+    float strength;
+
+    std::string fname;
+};
+
+// Load control vectors, scale each by strength, and add them together.
+// On error, returns {-1, empty}
+llama_control_vector_data llama_control_vector_load(const std::vector<llama_control_vector_load_info> & load_infos);
