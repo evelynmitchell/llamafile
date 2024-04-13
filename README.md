@@ -307,6 +307,12 @@ On WSL, it's recommended that the WIN32 interop feature be disabled:
 sudo sh -c "echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop"
 ```
 
+In the instance of getting a `Permission Denied` on disabling interop through CLI, it can be permanently disabled by adding the following in `/etc/wsl.conf`
+```sh
+[interop]
+enabled=false
+```
+
 On Raspberry Pi, if you get "mmap error 12" then it means your kernel is
 configured with fewer than 48 bits of address space. You need to upgrade
 to RPI 5. You can still use RPI 4 if you either (1) rebuild your kernel,
@@ -690,7 +696,7 @@ Our approach to security has these benefits:
 2. The main CLI command won't be able to access the network at all. This
    is enforced by the operating system kernel. It also won't be able to
    write to the file system. This keeps your computer safe in the event
-   that a bug is ever discovered in the the GGUF file format that lets
+   that a bug is ever discovered in the GGUF file format that lets
    an attacker craft malicious weights files and post them online. The
    only exception to this rule is if you pass the `--prompt-cache` flag
    without also specifying `--prompt-cache-ro`. In that case, security

@@ -23,22 +23,7 @@
 #include <libc/sysv/consts/hwcap.h>
 #include <sys/auxv.h>
 
-// TODO(jart): Delete when cosmocc 3.3.3 goes live.
-static bool check_avx512bf16(void) {
-#ifdef __x86_64__
-    // available on cooperlake, zen4, etc.
-    int abcd[4];
-    __cpuidex(abcd, 1, 0);
-    if (abcd[0] >= 7) {
-        __cpuidex(abcd, 7, 1);
-        return !!(abcd[0] & (1u << 5));
-    }
-#endif
-    return false;
-}
-
 static const long hwcap = getauxval(AT_HWCAP);
-const bool have_avx512bf16 = check_avx512bf16();
 
 /**
  * Performs optimized matrix multiplication on CPU.
@@ -77,12 +62,11 @@ bool llamafile_sgemm(int m, int n, int k, const void *A, int lda, const void *B,
     assert(nth > 0);
     assert(ith < nth);
 
-    if (Ctype != GGML_TYPE_F32)
-        return false;
-
     switch (Atype) {
 
     case GGML_TYPE_F32:
+        if (Ctype != GGML_TYPE_F32)
+            return false;
         if (Btype != GGML_TYPE_F32)
             return false;
 #ifdef __x86_64__
@@ -105,34 +89,64 @@ bool llamafile_sgemm(int m, int n, int k, const void *A, int lda, const void *B,
         return false;
 
     case GGML_TYPE_F16:
+        switch (Ctype) {
+        case GGML_TYPE_F32:
 #ifdef __x86_64__
-        if (!X86_HAVE(AVX))
-            return false;
-        if (Btype != GGML_TYPE_F32)
-            return false;
-        if (X86_HAVE(AVX512F) && !(k % 16))
-            return llamafile_sgemm_hss_avx512f(m, n, k, (const unsigned short *)A, lda,
-                                               (const float *)B, ldb, (float *)C, ldc, ith, nth,
-                                               task);
-        if (X86_HAVE(FMA) && X86_HAVE(F16C) && !(k % 8))
-            return llamafile_sgemm_hss_f16c(m, n, k, (const unsigned short *)A, lda,
-                                            (const float *)B, ldb, (float *)C, ldc, ith, nth, task);
+            if (!X86_HAVE(AVX))
+                return false;
+            if (Btype != GGML_TYPE_F32)
+                return false;
+            if (X86_HAVE(AVX512F) && !(k % 16))
+                return llamafile_sgemm_hss_avx512f(m, n, k, (const unsigned short *)A, lda,
+                                                   (const float *)B, ldb, (float *)C, ldc, ith, nth,
+                                                   task);
+            if (X86_HAVE(FMA) && X86_HAVE(F16C) && !(k % 8))
+                return llamafile_sgemm_hss_f16c(m, n, k, (const unsigned short *)A, lda,
+                                                (const float *)B, ldb, (float *)C, ldc, ith, nth,
+                                                task);
 #elif defined(__aarch64__)
-        if (n > 1 && !(k % 8) && (hwcap & HWCAP_FPHP) && Btype == GGML_TYPE_F16)
-            return llamafile_sgemm_hhs_neon(m, n, k, (const unsigned short *)A, lda,
-                                            (const unsigned short *)B, ldb, (float *)C, ldc, ith,
-                                            nth, task);
-        if (n > 1 && !(k % 4) && !(hwcap & HWCAP_FPHP) && Btype == GGML_TYPE_F32)
-            return llamafile_sgemm_hss_neon(m, n, k, (const unsigned short *)A, lda,
-                                            (const float *)B, ldb, (float *)C, ldc, ith, nth, task);
+            if (n > 1 && !(k % 8) && (hwcap & HWCAP_FPHP) && Btype == GGML_TYPE_F16)
+                return llamafile_sgemm_hhs_neon(m, n, k, (const unsigned short *)A, lda,
+                                                (const unsigned short *)B, ldb, (float *)C, ldc,
+                                                ith, nth, task);
+            if (n > 1 && !(k % 4) && !(hwcap & HWCAP_FPHP) && Btype == GGML_TYPE_F32)
+                return llamafile_sgemm_hss_neon(m, n, k, (const unsigned short *)A, lda,
+                                                (const float *)B, ldb, (float *)C, ldc, ith, nth,
+                                                task);
 #endif
-        return false;
+            return false;
+        case GGML_TYPE_F16:
+#ifdef __x86_64__
+            if (!X86_HAVE(AVX))
+                return false;
+            if (Btype != GGML_TYPE_F32)
+                return false;
+            if (X86_HAVE(AVX512F) && !(k % 16))
+                return llamafile_sgemm_hsh_avx512f(m, n, k, (const unsigned short *)A, lda,
+                                                   (const float *)B, ldb, (llamafile_fp16 *)C, ldc,
+                                                   ith, nth, task);
+            if (X86_HAVE(FMA) && X86_HAVE(F16C) && !(k % 8))
+                return llamafile_sgemm_hsh_f16c(m, n, k, (const unsigned short *)A, lda,
+                                                (const float *)B, ldb, (llamafile_fp16 *)C, ldc,
+                                                ith, nth, task);
+#elif defined(__aarch64__)
+            if (n > 1 && !(k % 4) && !(hwcap & HWCAP_FPHP) && Btype == GGML_TYPE_F32)
+                return llamafile_sgemm_hsh_neon(m, n, k, (const unsigned short *)A, lda,
+                                                (const float *)B, ldb, (llamafile_fp16 *)C, ldc,
+                                                ith, nth, task);
+#endif
+            return false;
+        default:
+            return false;
+        }
 
     case GGML_TYPE_BF16:
+        if (Ctype != GGML_TYPE_F32)
+            return false;
 #ifdef __x86_64__
         if (Btype != GGML_TYPE_F32)
             return false;
-        if (have_avx512bf16 && !(k % 32))
+        if (X86_HAVE(AVX512_BF16) && !(k % 32))
             return llamafile_sgemm_bss_avx512bf16(m, n, k, (const ggml_bf16_t *)A, lda,
                                                   (const float *)B, ldb, (float *)C, ldc, ith, nth,
                                                   task);
@@ -147,6 +161,8 @@ bool llamafile_sgemm(int m, int n, int k, const void *A, int lda, const void *B,
         return false;
 
     case GGML_TYPE_Q8_0:
+        if (Ctype != GGML_TYPE_F32)
+            return false;
         if (Btype != GGML_TYPE_Q8_0)
             return false;
 #ifdef __x86_64__
@@ -173,6 +189,8 @@ bool llamafile_sgemm(int m, int n, int k, const void *A, int lda, const void *B,
         return false;
 
     case GGML_TYPE_Q4_0:
+        if (Ctype != GGML_TYPE_F32)
+            return false;
         if (Btype != GGML_TYPE_Q8_0)
             return false;
 #ifdef __x86_64__
@@ -194,6 +212,8 @@ bool llamafile_sgemm(int m, int n, int k, const void *A, int lda, const void *B,
         return false;
 
     case GGML_TYPE_Q4_1:
+        if (Ctype != GGML_TYPE_F32)
+            return false;
         if (Btype != GGML_TYPE_Q8_1)
             return false;
 #ifdef __x86_64__

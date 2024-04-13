@@ -18,18 +18,31 @@
 #ifdef __x86_64__
 
 #include "sgemm.h"
+#include <immintrin.h>
 
-#define TA block_q4_1
-#define TB block_q8_1
-#define TC float
+#define KN 16
 
-#include "sgemmer1.inc"
+#define V __m512
+#define D __m512
+#define TA unsigned short
+#define TB float
+#define TC llamafile_fp16
 
-bool llamafile_sgemm_e1q1s_fma(int m, int n, int k, const TA *A, int lda, const TB *B, int ldb,
-                               TC *C, int ldc, int ith, int nth, int task) {
+static inline V load(const float *p) {
+    return _mm512_loadu_ps(p);
+}
+
+static inline V load(const unsigned short *p) {
+    return _mm512_cvtph_ps(_mm256_loadu_si256((const __m256i *)p));
+}
+
+#include "sgemmer.inc"
+
+bool llamafile_sgemm_hsh_avx512f(int m, int n, int k, const TA *A, int lda, const TB *B, int ldb,
+                                 TC *C, int ldc, int ith, int nth, int task) {
     if (task != GGML_TASK_TYPE_COMPUTE)
         return true;
-    SGEMMER1 tb{k, A, lda, B, ldb, C, ldc, ith, nth};
+    SGEMMER tb{k, A, lda, B, ldb, C, ldc, ith, nth};
     tb.matmul(m, n);
     return true;
 }

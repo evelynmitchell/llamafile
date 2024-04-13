@@ -1286,12 +1286,28 @@ struct llama_server_context
         }
         else
         {
-            const float *data = llama_get_embeddings(ctx);
-            std::vector<float> embedding(data, data + n_embd);
-            res.result_json = json
-            {
-                {"embedding", embedding },
-            };
+            std::vector<float> embd_res(n_embd, 0.0f);
+
+            for (int i = 0; i < batch.n_tokens; i++) {
+                const float * embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
+                if (embd == NULL) {
+                    embd = llama_get_embeddings_ith(ctx, i);
+                }
+                if (embd == NULL) {
+                    LOG_ERROR("failed to get embeddings", {
+                        {"token",  batch.token [i]},
+                        {"seq_id", batch.seq_id[i][0]}
+                    });
+                    res.result_json = json {
+                            {"embedding", std::vector<float>(n_embd, 0.0f)},
+                    };
+                    continue;
+                }
+                llama_embd_normalize(embd, embd_res.data(), n_embd);
+                res.result_json = json {
+                        {"embedding", embd_res},
+                };
+            }
         }
         queue_results.send(res);
     }
@@ -2500,7 +2516,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 break;
             }
             FLAG_gpu = llamafile_gpu_parse(argv[i]);
-            if (FLAG_gpu == -1)
+            if (FLAG_gpu == -2)
             {
                 fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
                 exit(1);
