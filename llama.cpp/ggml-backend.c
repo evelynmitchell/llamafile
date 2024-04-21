@@ -2,6 +2,8 @@
 // vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 
 #include "ggml-backend-impl.h"
+#include "ggml-alloc.h"
+#include "ggml-impl.h"
 
 #include <assert.h>
 #include <limits.h>
@@ -9,21 +11,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdlib.h>
-
-#include "ggml-alloc.h"
-#include "ggml-cuda.h"
-#include "ggml-impl.h"
-#include "ggml-metal.h"
-#include "llamafile/log.h"
 
 #ifndef NDEBUG
 #define NDEBUG // [jart] delete printf debugging
 #endif
 
-
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 
 // backend buffer type
 
@@ -2107,6 +2100,8 @@ bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t 
     return true;
 }
 
+#include "llamafile/log.h"
+
 GGML_CALL static void system_exit(int rc) {
     exit(rc);
 }
@@ -2119,11 +2114,21 @@ GGML_CALL static void *system_malloc(size_t n) {
     return malloc(n);
 }
 
+GGML_CALL static char *system_getenv(const char *s) {
+    return getenv(s);
+}
+
+GGML_CALL static long system_write(int fd, const void *p, long n) {
+  return write(fd, p, n);
+}
+
 static const struct ggml_backend_api kGgmlBackendApi = {
     &FLAG_log_disable,
     system_exit,
     system_free,
     system_malloc,
+    system_getenv,
+    system_write,
     ggml_backend_register,
     ggml_backend_buffer_init,
     ggml_backend_cpu_buffer_from_ptr,
