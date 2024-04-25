@@ -1,3 +1,6 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
 <html>
 
 <head>
@@ -747,8 +750,9 @@
 
             <div>
               <label for="template">Chat history template</label>
-              <textarea id="template" name="historyTemplate" value="${session.value.historyTemplate}" rows=1 oninput=${updateSession}/>
+              <textarea id="historyTemplate" name="historyTemplate" value="${session.value.historyTemplate}" rows=1 oninput=${updateSession}/>
             </div>
+
             ${GrammarControl()}
           </fieldset>
       `
@@ -1130,13 +1134,24 @@
       return html`<span dangerouslySetInnerHTML=${{ __html: md }} />`;
     };
 
+    const ModelProcessingInfo = (params) => {
+      if (!llamaStats.value) {
+        return html`<span/>`
+      }
+      return html`
+        <span>
+          prompt evaluation speed is ${llamaStats.value.timings.prompt_per_second_jart.toFixed(2)} prompt tokens evaluated per second
+        </span>
+      `
+    }
+
     const ModelGenerationInfo = (params) => {
       if (!llamaStats.value) {
         return html`<span/>`
       }
       return html`
         <span>
-          ${llamaStats.value.tokens_predicted} predicted, ${llamaStats.value.tokens_cached} cached, ${llamaStats.value.timings.predicted_per_token_ms.toFixed()}ms per token, ${llamaStats.value.timings.predicted_per_second.toFixed(2)} tokens per second
+          ${llamaStats.value.tokens_predicted} tokens predicted, ${llamaStats.value.timings.predicted_per_token_ms.toFixed()} ms per token, ${llamaStats.value.timings.predicted_per_second.toFixed(2)} tokens per second
         </span>
       `
     }
@@ -1274,7 +1289,8 @@
 
           <footer>
             <p><${ModelGenerationInfo} /></p>
-            <p>Powered by <a href="https://github.com/ggerganov/llama.cpp">llama.cpp</a>, <a href="https://ggml.ai">ggml.ai</a>, and <a href="https://github.com/Mozilla-Ocho/llamafile/">llamafile</a></p>
+            <p><${ModelProcessingInfo} /></p>
+            <p>powered by <a href="https://github.com/ggerganov/llama.cpp">llama.cpp</a>, <a href="https://ggml.ai">ggml.ai</a>, and <a href="https://github.com/Mozilla-Ocho/llamafile/">llamafile</a></p>
           </footer>
         </div>
       `;
@@ -1282,14 +1298,31 @@
 
     render(h(App), document.querySelector('#container'));
   </script>
-</head>
 
 <body>
-  <div id="container">
-    <input type="file" id="fileInput" accept="image/*" style="display: none;">
-  </div>
-  <div id="portal"></div>
-</body>
 
-</html>
+<div id="container">
+  <input type="file" id="fileInput" accept="image/*" style="display: none;">
+</div>
+<div id="portal"></div>
 
+<script>
+
+function load_config(id, url) {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200 && xhr.responseText.trim())
+            document.getElementById(id).value = xhr.responseText.trim();
+    };
+    xhr.open('GET', url, true);
+    xhr.send();
+}
+
+function on_load() {
+    load_config('template', '/prompt-template.txt');
+    load_config('historyTemplate', '/history-template.txt');
+}
+
+document.addEventListener('DOMContentLoaded', on_load);
+
+</script>

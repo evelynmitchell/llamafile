@@ -15,23 +15,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef __x86_64__
-
 #include "sgemm.h"
 
-#define TA block_q4_1
-#define TB block_q8_1
-#define TC float
-
-#include "sgemmer1.inc"
-
-bool llamafile_sgemm_e1q1s_fma(int m, int n, int k, const TA *A, int lda, const TB *B, int ldb,
-                               TC *C, int ldc, int ith, int nth, int task) {
-    if (task != GGML_TASK_TYPE_COMPUTE)
-        return true;
-    SGEMMER1 tb{k, A, lda, B, ldb, C, ldc, ith, nth};
-    tb.matmul(m, n);
-    return true;
+bool llamafile_sgemm_unsupported(int m, int n, int k, const void *A, int lda, const void *B,
+                                 int ldb, void *C, int ldc, int ith, int nth, int task, int Atype,
+                                 int Btype, int Ctype) {
+    return false;
 }
 
-#endif // __x86_64__
+bool llamafile_mixmul_unsupported(const struct ggml_compute_params *params,
+                                  const struct ggml_tensor *weights,
+                                  const struct ggml_tensor *thought, const struct ggml_tensor *plan,
+                                  struct ggml_tensor *result) {
+    return false;
+}

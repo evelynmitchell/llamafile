@@ -20,23 +20,24 @@
 #include "gemm.h"
 #include "llama.cpp/ggml.h"
 #include "llamafile.h"
+#include "macros.h"
 #include "numba.h"
 
 #define ITERATIONS 5
+#define ALLOC(n) (float *)memalign(4096, sizeof(float) * (n))
 
 int main(int argc, char *argv[]) {
     float tolerance = 2e-5;
     int m = 510;
     int n = 513;
     int k = 512;
-    int l = 3;
-    int lda = k + l;
-    int ldb = k + l;
-    int ldc = m + l;
-    float *A = new float[lda * m];
-    float *B = new float[ldb * n];
-    float *C = new float[ldc * n];
-    float *G = new float[ldc * n];
+    int lda = ROUNDUP(k, 16);
+    int ldb = ROUNDUP(k, 16);
+    int ldc = ROUNDUP(m, 16);
+    float *A = ALLOC(lda * m);
+    float *B = ALLOC(ldb * n);
+    float *C = ALLOC(ldc * n);
+    float *G = ALLOC(ldc * n);
     broadcast(A, lda * m, NAN);
     broadcast(B, ldb * n, NAN);
     broadcast(C, ldc * n, NAN);
@@ -72,8 +73,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
-    delete[] G;
-    delete[] C;
-    delete[] B;
-    delete[] A;
+    free(G);
+    free(C);
+    free(B);
+    free(A);
 }
