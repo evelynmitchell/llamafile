@@ -99,6 +99,7 @@ static struct Cuda {
     typeof(ggml_backend_cuda_get_device_memory) *GGML_CALL get_device_memory;
     typeof(ggml_backend_cuda_get_device_count) *GGML_CALL get_device_count;
     typeof(ggml_backend_cuda_unregister_host_buffer) *GGML_CALL unreg_host_buf;
+    typeof(ggml_backend_cuda_register_host_buffer) *GGML_CALL register_host_buffer;
 } ggml_cuda;
 
 static const char *Dlerror(void) {
@@ -205,6 +206,68 @@ static bool get_rocm_bin_path(char path[static PATH_MAX], const char *bin) {
     }
 }
 
+struct StringListEntry {
+    char *string;
+    struct StringListEntry *next;
+};
+
+struct StringList {
+    struct StringListEntry *head;
+    struct StringListEntry *tail;
+    size_t length;
+};
+
+void AddStringToStringList(struct StringList *string_list, char *string, size_t string_length) {
+    struct StringListEntry *new_entry = malloc(sizeof(struct StringListEntry));
+    new_entry->string = malloc(sizeof(char) * (string_length + 1));
+    strncpy(new_entry->string, string, string_length);
+    new_entry->string[string_length] = '\0';
+    new_entry->next = NULL;
+    if (string_list->head == NULL) {
+        string_list->head = new_entry;
+    } else {
+        string_list->tail->next = new_entry;
+    }
+    string_list->tail = new_entry;
+    ++string_list->length;
+}
+
+void CopyStringListToStringArray(struct StringList *string_list, char ***string_array) {
+    *string_array = malloc(sizeof(char *) * string_list->length);
+    struct StringListEntry *current = string_list->head;
+    int i = 0;
+    while (current != NULL) {
+        (*string_array)[i] = current->string;
+        current = current->next;
+        ++i;
+    }
+}
+
+int RemoveDuplicatesFromStringArray(char **strings, int num_strings) {
+    if (num_strings == 1)
+        return 1;
+    int tail = 0;
+    for (int current = 1; current < num_strings; ++current) {
+        if (strcmp(strings[tail], strings[current]) != 0) {
+            strings[tail + 1] = strings[current];
+            ++tail;
+        } else {
+            strings[current] = NULL;
+        }
+    }
+    return tail + 1;
+}
+
+void FreeStringList(struct StringList *string_list) {
+    struct StringListEntry *current = string_list->head;
+    while (current != NULL) {
+        struct StringListEntry *next = current->next;
+        free(current->string);
+        free(current);
+        current = next;
+    }
+}
+
 // Returns word-encoded array of 16-bit gfxXXXX gcnArchName numbers.
 static bool get_amd_offload_arch_flag(char out[static 64]) {
 
@@ -245,10 +308,11 @@ static bool get_amd_offload_arch_flag(char out[static 64]) {
 
     // Parse program output to word-encoded array.
     int rc;
-    int a = 0;
     int t = 0;
     char buf[512];
-    unsigned long archs = 0;
+    char name[64] = {'g', 'f', 'x'};
+    int j = 3;
+    struct StringList name_list = {NULL, NULL, 0};
     while ((rc = read(pipefds[0], buf, sizeof(buf))) > 0) {
         for (int i = 0; i < rc; ++i) {
             switch (t) {
@@ -265,30 +329,18 @@ static bool get_amd_offload_arch_flag(char out[static 64]) {
             case 2:
                 if (buf[i] == 'x') {
                     t = 3;
-                    a = 0;
                 } else {
                     t = 0;
                 }
                 break;
             case 3:
-                if (isdigit(buf[i])) {
-                    a *= 10;
-                    a += buf[i] - '0';
+                if (isalnum(buf[i])) {
+                    name[j] = buf[i];
+                    ++j;
                 } else {
+                    AddStringToStringList(&name_list, name, j);
                     t = 0;
-                    if ((a & 0xffff) && (a & 0xffff) == a) {
-                        a &= 0xffff;
-                        bool dupe = false;
-                        for (int j = 0; j < 4; ++j) {
-                            if (((archs >> (j * 16)) & 0xffff) == a) {
-                                dupe = true;
-                            }
-                        }
-                        if (!dupe) {
-                            archs <<= 16;
-                            archs |= a;
-                        }
-                    }
+                    j = 3;
                 }
                 break;
             default:
@@ -312,18 +364,23 @@ static bool get_amd_offload_arch_flag(char out[static 64]) {
     }
 
     // Serialize value for --offload-arch=LIST flag.
-    if (!archs) {
+    if (name_list.length == 0) {
         tinylog(__func__, ": warning: hipInfo output didn't list any graphics cards\n", NULL);
         return false;
     }
-    bool gotsome = false;
     char *p = stpcpy(out, "--offload-arch=");
-    do {
-        if (gotsome)
+    char **names = NULL;
+
+    CopyStringListToStringArray(&name_list, &names);
+    int num_names = RemoveDuplicatesFromStringArray(names, name_list.length);
+    for (int i = 0; i < num_names; ++i) {
+        if (i > 0)
             *p++ = ',';
-        p += sprintf(p, "gfx%d", archs & 0xffff);
-        gotsome = true;
-    } while ((archs >>= 16));
+        p += sprintf(p, "%s", names[i]);
+    }
+
+    FreeStringList(&name_list);
+    free(names);
 
     // woot
     return true;
@@ -651,6 +708,7 @@ static bool link_cuda_dso(const char *dso, const char *dir) {
     ok &= !!(ggml_cuda.get_device_memory = imp(lib, "ggml_backend_cuda_get_device_memory"));
     ok &= !!(ggml_cuda.get_device_count = imp(lib, "ggml_backend_cuda_get_device_count"));
     ok &= !!(ggml_cuda.unreg_host_buf = imp(lib, "ggml_backend_cuda_unregister_host_buffer"));
+    ok &= !!(ggml_cuda.register_host_buffer = imp(lib, "ggml_backend_cuda_register_host_buffer"));
     if (!ok) {
         tinylog(__func__, ": error: not all cuda symbols could be imported\n", NULL);
         cosmo_dlclose(lib);
@@ -916,4 +974,10 @@ GGML_CALL void ggml_backend_cuda_unregister_host_buffer(void *buffer) {
     if (!llamafile_has_cuda())
         return;
     return ggml_cuda.unreg_host_buf(buffer);
+}
+
+GGML_CALL bool ggml_backend_cuda_register_host_buffer(void *buffer, size_t size) {
+    if (!llamafile_has_cuda())
+        return false;
+    return ggml_cuda.register_host_buffer(buffer, size);
 }

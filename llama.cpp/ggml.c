@@ -861,18 +861,6 @@ ggml_type_traits_t ggml_internal_get_type_traits(enum ggml_type type) {
 // simd mappings
 //
 
-#if defined(__ARM_NEON)
-#if !defined(__aarch64__)
-
-// 64-bit compatibility
-
-inline static float vaddvq_f32(float32x4_t v) {
-    return vgetq_lane_f32(v, 0) + vgetq_lane_f32(v, 1) + vgetq_lane_f32(v, 2) + vgetq_lane_f32(v, 3);
-}
-
-#endif
-#endif
-
 // we define a common set of C macros which map to specific intrinsics based on the current architecture
 // we then implement the fundamental computation operations below using only these macros
 // adding support for new architectures requires to define the corresponding SIMD macros
@@ -21824,11 +21812,7 @@ int ggml_cpu_has_blas(void) {
 }
 
 int ggml_cpu_has_cuda(void) {
-#if defined(GGML_USE_CUDA)
-    return 1;
-#else
-    return 0;
-#endif
+    return llamafile_has_cuda();
 }
 
 int ggml_cpu_has_cublas(void) {
