@@ -328,14 +328,20 @@ extern "C" {
     // get ggml_status name string
     GGML_API GGML_CALL const char * ggml_status_to_string(enum ggml_status status);
 
+    // ieee 754-2008 half-precision float16
+    // todo: make this not an integral type
     typedef uint16_t ggml_fp16_t;
+    GGML_API float       ggml_fp16_to_fp32(ggml_fp16_t);
+    GGML_API ggml_fp16_t ggml_fp32_to_fp16(float);
+    GGML_API void        ggml_fp16_to_fp32_row(const ggml_fp16_t *, float *, int64_t);
+    GGML_API void        ggml_fp32_to_fp16_row(const float *, ggml_fp16_t *, int64_t);
 
-    // convert FP16 <-> FP32
-    GGML_API float       ggml_fp16_to_fp32(ggml_fp16_t x);
-    GGML_API ggml_fp16_t ggml_fp32_to_fp16(float x);
-
-    GGML_API void ggml_fp16_to_fp32_row(const ggml_fp16_t * x, float * y, int64_t n);
-    GGML_API void ggml_fp32_to_fp16_row(const float * x, ggml_fp16_t * y, int64_t n);
+    // google brain half-precision bfloat16
+    typedef struct { uint16_t bits; } ggml_bf16_t;
+    GGML_API ggml_bf16_t ggml_fp32_to_bf16(float);
+    GGML_API float       ggml_bf16_to_fp32(ggml_bf16_t);  // consider just doing << 16
+    GGML_API void        ggml_bf16_to_fp32_row(const ggml_bf16_t *, float *, int64_t);
+    GGML_API void        ggml_fp32_to_bf16_row(const float *, ggml_bf16_t *, int64_t);
 
     struct ggml_object;
     struct ggml_context;
@@ -479,6 +485,7 @@ extern "C" {
         GGML_OP_LEAKY_RELU,
 
         GGML_OP_FLASH_ATTN,
+        GGML_OP_FLASH_ATTN_EXT,
         GGML_OP_FLASH_FF,
         GGML_OP_FLASH_ATTN_BACK,
         GGML_OP_SSM_CONV,
@@ -674,6 +681,8 @@ extern "C" {
         GGML_TASK_TYPE_FINALIZE,
     };
 
+    struct ggml_barrier;
+
     struct ggml_compute_params {
         enum ggml_task_type type;
 
@@ -683,6 +692,8 @@ extern "C" {
         // work buffer for all threads
         size_t wsize;
         void * wdata;
+
+        struct ggml_barrier *barrier;
     };
 
     // numa strategies
@@ -761,10 +772,12 @@ extern "C" {
     GGML_API           bool ggml_is_3d        (const struct ggml_tensor * tensor);
     GGML_API           int  ggml_n_dims       (const struct ggml_tensor * tensor); // returns 1 for scalars
 
-    GGML_API bool ggml_are_same_shape(const struct ggml_tensor * t0, const struct ggml_tensor * t1);
+    GGML_API GGML_CALL bool ggml_are_same_shape(const struct ggml_tensor * t0, const struct ggml_tensor * t1);
 
     // use this to compute the memory overhead of a tensor
     GGML_API size_t ggml_tensor_overhead(void);
+
+    GGML_API bool ggml_validate_row_data(enum ggml_type type, const void * data, size_t nbytes);
 
     // main
 
@@ -1724,6 +1737,25 @@ extern "C" {
             struct ggml_tensor  * v,
             bool                  masked);
 
+#define GGML_KQ_MASK_PAD 32
+
+    // q:    [n_embd, n_batch,     n_head,    1]
+    // k:    [n_embd, n_kv,        n_head_kv, 1]
+    // v:    [n_embd, n_kv,        n_head_kv, 1] !! not transposed !!
+    // mask: [n_kv,   n_batch_pad, 1,         1] !! n_batch_pad = GGML_PAD(n_batch, GGML_KQ_MASK_PAD) !!
+    // res:  [n_embd, n_head,      n_batch,   1] !! permuted !!
+    GGML_API struct ggml_tensor * ggml_flash_attn_ext(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * q,
+            struct ggml_tensor  * k,
+            struct ggml_tensor  * v,
+            struct ggml_tensor  * mask,
+            float                 scale);
+
+    GGML_API void ggml_flash_attn_ext_set_prec(
+            struct ggml_tensor * a,
+            enum ggml_prec       prec);
+
     GGML_API struct ggml_tensor * ggml_flash_attn_back(
            struct ggml_context * ctx,
            struct ggml_tensor  * q,
@@ -2371,90 +2403,6 @@ extern "C" {
     GGML_API int ggml_cpu_has_sycl       (void);
     GGML_API int ggml_cpu_has_vsx        (void);
     GGML_API int ggml_cpu_has_matmul_int8(void);
-
-    /**
-     * Google Brain 16-bit floating point number.
-     *
-     *       ┌sign
-     *       │
-     *       │   ┌exponent
-     *       │   │
-     *       │   │      ┌mantissa
-     *       │   │      │
-     *       │┌──┴───┐┌─┴───┐
-     *     0b0000000000000000 bfloat16
-     *
-     * Since bf16 has the same number of exponent bits as a 32bit float,
-     * encoding and decoding numbers becomes relatively straightforward.
-     *
-     *       ┌sign
-     *       │
-     *       │   ┌exponent
-     *       │   │
-     *       │   │      ┌mantissa
-     *       │   │      │
-     *       │┌──┴───┐┌─┴───────────────────┐
-     *     0b00000000000000000000000000000000 IEEE binary32
-     *
-     * For comparison, the standard fp16 format has fewer exponent bits.
-     *
-     *       ┌sign
-     *       │
-     *       │  ┌exponent
-     *       │  │
-     *       │  │    ┌mantissa
-     *       │  │    │
-     *       │┌─┴─┐┌─┴──────┐
-     *     0b0000000000000000 IEEE binary16
-     *
-     * So be warned that converting between them yields a ten bit float.
-     *
-     * @see IEEE 754-2008
-     */
-    typedef struct {
-        uint16_t x;
-    } ggml_bf16_t;
-
-    /**
-     * Converts bfloat16 to float32.
-     */
-    static inline float ggml_bf16_to_fp32(ggml_bf16_t h) {
-        union {
-            float f;
-            uint32_t i;
-        } u;
-        u.i = (uint32_t)h.x << 16;
-        return u.f;
-    }
-
-    /**
-     * Converts float32 to bfloat16.
-     *
-     * This function is binary identical to AMD Zen4 VCVTNEPS2BF16.
-     * Subnormals shall be flushed to zero, and NANs will be quiet.
-     * This code should vectorize nicely if using modern compilers.
-     */
-    static inline ggml_bf16_t ggml_fp32_to_bf16(float s) {
-        ggml_bf16_t h;
-        union {
-            float f;
-            uint32_t i;
-        } u;
-        u.f = s;
-        if ((u.i & 0x7fffffff) > 0x7f800000) { /* nan */
-            h.x = (u.i >> 16) | 64; /* force to quiet */
-            return h;
-        }
-        if (!(u.i & 0x7f800000)) { /* subnormal */
-            h.x = (u.i & 0x80000000) >> 16; /* flush to zero */
-            return h;
-        }
-        h.x = (u.i + (0x7fff + ((u.i >> 16) & 1))) >> 16;
-        return h;
-    }
-
-    GGML_API void ggml_bf16_to_fp32_row(const ggml_bf16_t * x, float * y, int64_t n);
-    GGML_API void ggml_fp32_to_bf16_row(const float * x, ggml_bf16_t * y, int64_t n);
 
     //
     // Internal types and functions exposed for tests and benchmarks

@@ -164,6 +164,11 @@ int main(int argc, char ** argv) {
         return server_cli(argc, argv);
     }
 
+    if (llamafile_has(argv, "--embedding")) {
+        int embedding_cli(int, char **);
+        return embedding_cli(argc, argv);
+    }
+
     gpt_params params;
     g_params = &params;
 
@@ -184,20 +189,6 @@ int main(int argc, char ** argv) {
         return 1;
     }
 
-    if (!params.mmproj.empty() &&
-        (!params.image.empty() ||
-         params.prompt.find("<img src=\"") != std::string::npos)) {
-        return llava_cli(argc, argv, &params);
-    }
-
-    // TODO: Dump params ?
-    //LOG("Params perplexity: %s\n", LOG_TOSTR(params.perplexity));
-
-    // save choice to use color for later
-    // (note for later: this is a slightly awkward choice)
-    console::init(params.simple_io, params.use_color);
-    atexit([]() { console::cleanup(); });
-
     if (!FLAG_unsecure && !llamafile_has_gpu()) {
         // Enable pledge() security on Linux and OpenBSD.
         // - We do this *after* opening the log file for writing.
@@ -213,6 +204,7 @@ int main(int argc, char ** argv) {
         } else {
             promises = "stdio rpath tty";
         }
+        __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
         if (pledge(0, 0)) {
             LOG_TEE("warning: this OS doesn't support pledge() security\n");
         } else if (pledge(promises, 0)) {
@@ -220,6 +212,20 @@ int main(int argc, char ** argv) {
             exit(1);
         }
     }
+
+    if (!params.mmproj.empty() &&
+        (!params.image.empty() ||
+         params.prompt.find("<img src=\"") != std::string::npos)) {
+        return llava_cli(argc, argv, params);
+    }
+
+    // TODO: Dump params ?
+    //LOG("Params perplexity: %s\n", LOG_TOSTR(params.perplexity));
+
+    // save choice to use color for later
+    // (note for later: this is a slightly awkward choice)
+    console::init(!params.interactive || params.simple_io, params.use_color);
+    atexit([]() { console::cleanup(); });
 
     if (params.logits_all) {
         printf("\n************\n");
@@ -403,7 +409,7 @@ int main(int argc, char ** argv) {
             log_tostr(embd_inp.empty()), n_matching_session_tokens, embd_inp.size(), session_tokens.size(), embd_inp.size());
 
     // if we will use the cache for the full prompt without reaching the end of the cache, force
-    // reevaluation of the last token token to recalculate the cached logits
+    // reevaluation of the last token to recalculate the cached logits
     if (!embd_inp.empty() && n_matching_session_tokens == embd_inp.size() && session_tokens.size() > embd_inp.size()) {
         LOGLN("recalculate the cached logits (do): session_tokens.resize( %zu )", embd_inp.size() - 1);
 
@@ -589,7 +595,6 @@ int main(int argc, char ** argv) {
     }
 
     struct llama_sampling_context * ctx_sampling = llama_sampling_init(sparams);
-    bool should_show_special_tokens = sparams.grammar.empty();
 
     while ((n_remain != 0 && !is_antiprompt) || params.interactive) {
         // predict
@@ -803,8 +808,7 @@ int main(int argc, char ** argv) {
         // display text
         if (input_echo && display) {
             for (auto id : embd) {
-                const std::string token_str =
-                        llama_token_to_piece(ctx, id, should_show_special_tokens);
+                const std::string token_str = llama_token_to_piece(ctx, id);
                 printf("%s", token_str.c_str());
 
                 if (embd.size() > 1) {
@@ -970,7 +974,7 @@ int main(int argc, char ** argv) {
                     for (size_t i = original_size; i < embd_inp.size(); ++i) {
                         const llama_token token = embd_inp[i];
                         output_tokens.push_back(token);
-                        output_ss << llama_token_to_piece(ctx, token, should_show_special_tokens);
+                        output_ss << llama_token_to_piece(ctx, token);
                     }
 
                     n_remain -= line_inp.size();

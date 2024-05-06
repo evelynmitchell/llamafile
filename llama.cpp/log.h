@@ -1,4 +1,6 @@
 #pragma once
+#define LOG_NO_TIMESTAMPS
+#define LOG_NO_FILE_LINE_FUNCTION
 
 #include <chrono>
 #include <cstring>
@@ -235,7 +237,7 @@ inline std::string log_filename_generator_impl(LogTriState multilog, const std::
 // INTERNAL, DO NOT USE
 //  USE LOG() INSTEAD
 //
-#if !defined(_MSC_VER) or defined(__INTEL_LLVM_COMPILER)
+#if !defined(_MSC_VER) || defined(__INTEL_LLVM_COMPILER)
     #define LOG_IMPL(str, ...)                                                                                      \
     do {                                                                                                            \
         if (LOG_TARGET != nullptr)                                                                                  \
@@ -258,7 +260,7 @@ inline std::string log_filename_generator_impl(LogTriState multilog, const std::
 // INTERNAL, DO NOT USE
 //  USE LOG_TEE() INSTEAD
 //
-#if !defined(_MSC_VER) or defined(__INTEL_LLVM_COMPILER)
+#if !defined(_MSC_VER) || defined(__INTEL_LLVM_COMPILER)
     #define LOG_TEE_IMPL(str, ...)                                                                                                      \
     do {                                                                                                                                \
         if (LOG_TARGET != nullptr)                                                                                                      \
