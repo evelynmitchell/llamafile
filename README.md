@@ -1,36 +1,38 @@
 # llamafile
 
+[![ci status](https://github.com/Mozilla-Ocho/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/Mozilla-Ocho/llamafile/actions/workflows/ci.yml)<br/>
+[![](https://dcbadge.vercel.app/api/server/teDuGYVTB2)](https://discord.gg/teDuGYVTB2)<br/><br/>
+
 <img src="llamafile/llamafile-640x640.png" width="320" height="320"
      alt="[line drawing of llama animal head in front of slightly open manilla folder filled with files]">
 
 **llamafile lets you distribute and run LLMs with a single file. ([announcement blog post](https://hacks.mozilla.org/2023/11/introducing-llamafile/))**
 
-[![](https://dcbadge.vercel.app/api/server/teDuGYVTB2)](https://discord.gg/teDuGYVTB2)
-
-Our goal is to make open LLMs much more 
-accessible to both developers and end users. We're doing that by 
-combining [llama.cpp](https://github.com/ggerganov/llama.cpp) with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) into one 
-framework that collapses all the complexity of LLMs down to 
+Our goal is to make open LLMs much more
+accessible to both developers and end users. We're doing that by
+combining [llama.cpp](https://github.com/ggerganov/llama.cpp) with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) into one
+framework that collapses all the complexity of LLMs down to
 a single-file executable (called a "llamafile") that runs
-locally on most computers, with no installation.
+locally on most computers, with no installation.<br/><br/>
 
-[Join us on our Discord](https://discord.gg/teDuGYVTB2)
+<a href="https://future.mozilla.org"><img src="llamafile/mozilla-logo-bw-rgb.png" width="150"></a><br/>
+llamafile is a Mozilla Builders project.<br/><br/>
 
 ## Quickstart
 
-The easiest way to try it for yourself is to download our example 
-llamafile for the [LLaVA](https://llava-vl.github.io/) model (license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/), 
-[OpenAI](https://openai.com/policies/terms-of-use)). LLaVA is a new LLM that can do more 
-than just chat; you can also upload images and ask it questions 
-about them. With llamafile, this all happens locally; no data 
+The easiest way to try it for yourself is to download our example
+llamafile for the [LLaVA](https://llava-vl.github.io/) model (license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/),
+[OpenAI](https://openai.com/policies/terms-of-use)). LLaVA is a new LLM that can do more
+than just chat; you can also upload images and ask it questions
+about them. With llamafile, this all happens locally; no data
 ever leaves your computer.
 
-1. Download [llava-v1.5-7b-q4.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4.llamafile?download=true) (3.97 GB).
+1. Download [llava-v1.5-7b-q4.llamafile](https://huggingface.co/Mozilla/llava-v1.5-7b-llamafile/resolve/main/llava-v1.5-7b-q4.llamafile?download=true) (4.29 GB).
 
 2. Open your computer's terminal.
 
-3. If you're using macOS, Linux, or BSD, you'll need to grant permission 
-for your computer to execute this new file. (You only need to do this 
+3. If you're using macOS, Linux, or BSD, you'll need to grant permission
+for your computer to execute this new file. (You only need to do this
 once.)
 
 ```sh
@@ -42,10 +44,10 @@ chmod +x llava-v1.5-7b-q4.llamafile
 5. Run the llamafile. e.g.:
 
 ```sh
-./llava-v1.5-7b-q4.llamafile -ngl 9999
+./llava-v1.5-7b-q4.llamafile
 ```
 
-6. Your browser should open automatically and display a chat interface. 
+6. Your browser should open automatically and display a chat interface.
 (If it doesn't, just open your browser and point it at http://localhost:8080)
 
 7. When you're done chatting, return to your terminal and hit
@@ -170,33 +172,36 @@ try out llamafile with different kinds of LLMs.
 
 | Model                  | Size     | License                                                                                                                            | llamafile                                                                                                                                                                                      | other quants                                                                        |
 | ---                    | ---      | ---                                                                                                                                | ---                                                                                                                                                                                            | ---                                                                                 |
-| LLaVA 1.5              | 3.97 GB  | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)                                                     | [llava-v1.5-7b-q4.llamafile](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/resolve/main/llava-v1.5-7b-q4.llamafile?download=true)                                                          | [See HF repo](https://huggingface.co/jartine/llava-v1.5-7B-GGUF)                    |
-| TinyLlama-1.1B         | 2.05 GB  | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [TinyLlama-1.1B-Chat-v1.0.F16.llamafile](https://huggingface.co/jartine/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/TinyLlama-1.1B-Chat-v1.0.F16.llamafile?download=true)                       | [See HF repo](https://huggingface.co/jartine/TinyLlama-1.1B-Chat-v1.0-GGUF)         |
-| Mistral-7B-Instruct    | 3.85 GB  | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [mistral-7b-instruct-v0.2.Q4\_0.llamafile](https://huggingface.co/jartine/Mistral-7B-Instruct-v0.2-llamafile/resolve/main/mistral-7b-instruct-v0.2.Q4_0.llamafile?download=true)               | [See HF repo](https://huggingface.co/jartine/Mistral-7B-Instruct-v0.2-llamafile)    |
-| Phi-3-mini-4k-instruct | 7.67 GB  | [Apache 2.0](https://huggingface.co/jartine/Phi-3-mini-4k-instruct-llamafile/blob/main/LICENSE)                                    | [Phi-3-mini-4k-instruct.F16.llamafile](https://huggingface.co/jartine/Phi-3-mini-4k-instruct-llamafile/resolve/main/Phi-3-mini-4k-instruct.F16.llamafile?download=true)                        | [See HF repo](https://huggingface.co/jartine/Phi-3-mini-4k-instruct-llamafile)      |
-| Mixtral-8x7B-Instruct  | 30.03 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M.llamafile](https://huggingface.co/jartine/Mixtral-8x7B-Instruct-v0.1-llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M.llamafile?download=true)    | [See HF repo](https://huggingface.co/jartine/Mixtral-8x7B-Instruct-v0.1-llamafile)  |
-| WizardCoder-Python-34B | 22.23 GB | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)                                                     | [wizardcoder-python-34b-v1.0.Q5\_K\_M.llamafile](https://huggingface.co/jartine/WizardCoder-Python-34B-V1.0-llamafile/resolve/main/wizardcoder-python-34b-v1.0.Q5_K_M.llamafile?download=true) | [See HF repo](https://huggingface.co/jartine/WizardCoder-Python-34B-V1.0-llamafile) |
+| LLaVA 1.5              | 3.97 GB  | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)                                                     | [llava-v1.5-7b-q4.llamafile](https://huggingface.co/Mozilla/llava-v1.5-7b-llamafile/resolve/main/llava-v1.5-7b-q4.llamafile?download=true)                                                          | [See HF repo](https://huggingface.co/Mozilla/llava-v1.5-7b-llamafile)                    |
+| TinyLlama-1.1B         | 2.05 GB  | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [TinyLlama-1.1B-Chat-v1.0.F16.llamafile](https://huggingface.co/Mozilla/TinyLlama-1.1B-Chat-v1.0-llamafile/resolve/main/TinyLlama-1.1B-Chat-v1.0.F16.llamafile?download=true)                       | [See HF repo](https://huggingface.co/Mozilla/TinyLlama-1.1B-Chat-v1.0-llamafile)         |
+| Mistral-7B-Instruct    | 3.85 GB  | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [mistral-7b-instruct-v0.2.Q4\_0.llamafile](https://huggingface.co/Mozilla/Mistral-7B-Instruct-v0.2-llamafile/resolve/main/mistral-7b-instruct-v0.2.Q4_0.llamafile?download=true)               | [See HF repo](https://huggingface.co/Mozilla/Mistral-7B-Instruct-v0.2-llamafile)    |
+| Phi-3-mini-4k-instruct | 7.67 GB  | [Apache 2.0](https://huggingface.co/Mozilla/Phi-3-mini-4k-instruct-llamafile/blob/main/LICENSE)                                    | [Phi-3-mini-4k-instruct.F16.llamafile](https://huggingface.co/Mozilla/Phi-3-mini-4k-instruct-llamafile/resolve/main/Phi-3-mini-4k-instruct.F16.llamafile?download=true)                        | [See HF repo](https://huggingface.co/Mozilla/Phi-3-mini-4k-instruct-llamafile)      |
+| Mixtral-8x7B-Instruct  | 30.03 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [mixtral-8x7b-instruct-v0.1.Q5\_K\_M.llamafile](https://huggingface.co/Mozilla/Mixtral-8x7B-Instruct-v0.1-llamafile/resolve/main/mixtral-8x7b-instruct-v0.1.Q5_K_M.llamafile?download=true)    | [See HF repo](https://huggingface.co/Mozilla/Mixtral-8x7B-Instruct-v0.1-llamafile)  |
+| WizardCoder-Python-34B | 22.23 GB | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)                                                     | [wizardcoder-python-34b-v1.0.Q5\_K\_M.llamafile](https://huggingface.co/Mozilla/WizardCoder-Python-34B-V1.0-llamafile/resolve/main/wizardcoder-python-34b-v1.0.Q5_K_M.llamafile?download=true) | [See HF repo](https://huggingface.co/Mozilla/WizardCoder-Python-34B-V1.0-llamafile) |
 | WizardCoder-Python-13B | 7.33 GB  | [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)                                                     | [wizardcoder-python-13b.llamafile](https://huggingface.co/jartine/wizardcoder-13b-python/resolve/main/wizardcoder-python-13b.llamafile?download=true)                                          | [See HF repo](https://huggingface.co/jartine/wizardcoder-13b-python)                |
-| LLaMA-3-Instruct-70B   | 37.25 GB | [llama3](https://huggingface.co/jartine/Meta-Llama-3-8B-Instruct-llamafile/blob/main/Meta-Llama-3-Community-License-Agreement.txt) | [Meta-Llama-3-70B-Instruct.Q4\_0.llamafile](https://huggingface.co/jartine/Meta-Llama-3-70B-Instruct-llamafile/resolve/main/Meta-Llama-3-70B-Instruct.Q4_0.llamafile?download=true)            | [See HF repo](https://huggingface.co/jartine/Meta-Llama-3-70B-Instruct-llamafile)   |
-| LLaMA-3-Instruct-8B    | 5.37 GB  | [llama3](https://huggingface.co/jartine/Meta-Llama-3-8B-Instruct-llamafile/blob/main/Meta-Llama-3-Community-License-Agreement.txt) | [Meta-Llama-3-8B-Instruct.Q5\_K\_M.llamafile](https://huggingface.co/jartine/Meta-Llama-3-8B-Instruct-llamafile/resolve/main/Meta-Llama-3-8B-Instruct.Q5_K_M.llamafile?download=true)          | [See HF repo](https://huggingface.co/jartine/Meta-Llama-3-8B-Instruct-llamafile)    |
-| Rocket-3B              | 1.89 GB  | [cc-by-sa-4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.en)                                                             | [rocket-3b.Q5\_K\_M.llamafile](https://huggingface.co/jartine/rocket-3B-llamafile/resolve/main/rocket-3b.Q5_K_M.llamafile?download=true)                                                       | [See HF repo](https://huggingface.co/jartine/rocket-3B-llamafile)                   |
+| LLaMA-3-Instruct-70B   | 37.25 GB | [llama3](https://huggingface.co/Mozilla/Meta-Llama-3-8B-Instruct-llamafile/blob/main/Meta-Llama-3-Community-License-Agreement.txt) | [Meta-Llama-3-70B-Instruct.Q4\_0.llamafile](https://huggingface.co/Mozilla/Meta-Llama-3-70B-Instruct-llamafile/resolve/main/Meta-Llama-3-70B-Instruct.Q4_0.llamafile?download=true)            | [See HF repo](https://huggingface.co/Mozilla/Meta-Llama-3-70B-Instruct-llamafile)   |
+| LLaMA-3-Instruct-8B    | 5.37 GB  | [llama3](https://huggingface.co/Mozilla/Meta-Llama-3-8B-Instruct-llamafile/blob/main/Meta-Llama-3-Community-License-Agreement.txt) | [Meta-Llama-3-8B-Instruct.Q5\_K\_M.llamafile](https://huggingface.co/Mozilla/Meta-Llama-3-8B-Instruct-llamafile/resolve/main/Meta-Llama-3-8B-Instruct.Q5_K_M.llamafile?download=true)          | [See HF repo](https://huggingface.co/Mozilla/Meta-Llama-3-8B-Instruct-llamafile)    |
+| Rocket-3B              | 1.89 GB  | [cc-by-sa-4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.en)                                                             | [rocket-3b.Q5\_K\_M.llamafile](https://huggingface.co/Mozilla/rocket-3B-llamafile/resolve/main/rocket-3b.Q5_K_M.llamafile?download=true)                                                       | [See HF repo](https://huggingface.co/Mozilla/rocket-3B-llamafile)                   |
+| *Text Embedding Models* |          |                                                                                                                                    |                                                                                                                                                                                                |                                                                                     |
+| E5-Mistral-7B-Instruct  | 5.16 GB  | [MIT](https://choosealicense.com/licenses/mit/)                                                                                    | [e5-mistral-7b-instruct-Q5_K_M.llamafile](https://huggingface.co/Mozilla/e5-mistral-7b-instruct/resolve/main/e5-mistral-7b-instruct-Q5_K_M.llamafile?download=true)                            | [See HF repo](https://huggingface.co/Mozilla/e5-mistral-7b-instruct)                |
+| mxbai-embed-large-v1    | 0.7 GB   | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [mxbai-embed-large-v1-f16.llamafile](https://huggingface.co/Mozilla/mxbai-embed-large-v1-llamafile/resolve/main/mxbai-embed-large-v1-f16.llamafile?download=true)                              | [See HF Repo](https://huggingface.co/Mozilla/mxbai-embed-large-v1-llamafile)        |
 
 Here is an example for the Mistral command-line llamafile:
 
 ```sh
-./mistral-7b-instruct-v0.2.Q5_K_M.llamafile -ngl 9999 --temp 0.7 -p '[INST]Write a story about llamas[/INST]'
+./mistral-7b-instruct-v0.2.Q5_K_M.llamafile --temp 0.7 -p '[INST]Write a story about llamas[/INST]'
 ```
 
 And here is an example for WizardCoder-Python command-line llamafile:
 
 ```sh
-./wizardcoder-python-13b.llamafile -ngl 9999 --temp 0 -e -r '```\n' -p '```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
+./wizardcoder-python-13b.llamafile --temp 0 -e -r '```\n' -p '```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
 ```
 
 And here's an example for the LLaVA command-line llamafile:
 
 ```sh
-./llava-v1.5-7b-q4.llamafile -ngl 9999 --temp 0.2 --image lemurs.jpg -e -p '### User: What do you see?\n### Assistant:'
+./llava-v1.5-7b-q4.llamafile --temp 0.2 --image lemurs.jpg -e -p '### User: What do you see?\n### Assistant:'
 ```
 
 As before, macOS, Linux, and BSD users will need to use the "chmod"
@@ -214,13 +219,13 @@ later in this document.
 
 ## How llamafile works
 
-A llamafile is an executable LLM that you can run on your own 
-computer. It contains the weights for a given open LLM, as well 
-as everything needed to actually run that model on your computer. 
-There's nothing to install or configure (with a few caveats, discussed 
+A llamafile is an executable LLM that you can run on your own
+computer. It contains the weights for a given open LLM, as well
+as everything needed to actually run that model on your computer.
+There's nothing to install or configure (with a few caveats, discussed
 in subsequent sections of this document).
 
-This is all accomplished by combining llama.cpp with Cosmopolitan Libc, 
+This is all accomplished by combining llama.cpp with Cosmopolitan Libc,
 which provides some useful capabilities:
 
 1. llamafiles can run on multiple CPU microarchitectures. We
@@ -234,10 +239,10 @@ and most UNIX shells. It's also able to be easily converted (by either
 you or your users) to the platform-native format, whenever required.
 
 3. llamafiles can run on six OSes (macOS, Windows, Linux,
-FreeBSD, OpenBSD, and NetBSD). If you make your own llama files, you'll 
-only need to build your code once, using a Linux-style toolchain. The 
-GCC-based compiler we provide is itself an Actually Portable Executable, 
-so you can build your software for all six OSes from the comfort of 
+FreeBSD, OpenBSD, and NetBSD). If you make your own llama files, you'll
+only need to build your code once, using a Linux-style toolchain. The
+GCC-based compiler we provide is itself an Actually Portable Executable,
+so you can build your software for all six OSes from the comfort of
 whichever one you prefer most for development.
 
 4. The weights for an LLM can be embedded within the llamafile.
@@ -247,26 +252,26 @@ archive. It enables quantized weights distributed online to be prefixed
 with a compatible version of the llama.cpp software, thereby ensuring
 its originally observed behaviors can be reproduced indefinitely.
 
-5. Finally, with the tools included in this project you can create your 
-*own* llamafiles, using any compatible model weights you want. You can 
-then distribute these llamafiles to other people, who can easily make 
+5. Finally, with the tools included in this project you can create your
+*own* llamafiles, using any compatible model weights you want. You can
+then distribute these llamafiles to other people, who can easily make
 use of them regardless of what kind of computer they have.
 
 ## Using llamafile with external weights
 
-Even though our example llamafiles have the weights built-in, you don't 
-*have* to use llamafile that way. Instead, you can download *just* the 
-llamafile software (without any weights included) from our releases page. 
-You can then use it alongside any external weights you may have on hand. 
-External weights are particularly useful for Windows users because they 
-enable you to work around Windows' 4GB executable file size limit. 
+Even though our example llamafiles have the weights built-in, you don't
+*have* to use llamafile that way. Instead, you can download *just* the
+llamafile software (without any weights included) from our releases page.
+You can then use it alongside any external weights you may have on hand.
+External weights are particularly useful for Windows users because they
+enable you to work around Windows' 4GB executable file size limit.
 
 For Windows users, here's an example for the Mistral LLM:
 
 ```sh
 curl -L -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.6/llamafile-0.6
 curl -L -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
-./llamafile.exe -m mistral.gguf -ngl 9999
+./llamafile.exe -m mistral.gguf
 ```
 
 Windows users may need to change `./llamafile.exe` to `.\llamafile.exe`
@@ -294,13 +299,13 @@ sudo sh -c "echo ':APE:M::MZqFpD::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/regis
 sudo sh -c "echo ':APE-jart:M::jartsr::/usr/bin/ape:' >/proc/sys/fs/binfmt_misc/register"
 ```
 
-As mentioned above, on Windows you may need to rename your llamafile by 
-adding `.exe` to the filename. 
+As mentioned above, on Windows you may need to rename your llamafile by
+adding `.exe` to the filename.
 
 Also as mentioned above, Windows also has a maximum file size limit of 4GB
 for executables. The LLaVA server executable above is just 30MB shy of
 that limit, so it'll work on Windows, but with larger models like
-WizardCoder 13B, you need to store the weights in a separate file. An 
+WizardCoder 13B, you need to store the weights in a separate file. An
 example is provided above; see "Using llamafile with external weights."
 
 On WSL, it's recommended that the WIN32 interop feature be disabled:
@@ -325,7 +330,7 @@ if you have CrowdStrike and then ask to be whitelisted.
 
 ## Supported OSes
 
-llamafile supports the following operating systems, which require a minimum 
+llamafile supports the following operating systems, which require a minimum
 stock install:
 
 - Linux 2.6.18+ (i.e. every distro since RHEL5 c. 2007)
@@ -423,7 +428,7 @@ llama.cpp command line interface, utilizing WizardCoder-Python-13B
 weights:
 
 ```sh
-llamafile -ngl 9999 \
+llamafile \
   -m wizardcoder-python-13b-v1.0.Q8_0.gguf \
   --temp 0 -r '}\n' -r '```\n' \
   -e -p '```c\nvoid *memcpy(void *dst, const void *src, size_t size) {\n'
@@ -574,10 +579,37 @@ that describes the changes, and mention it in your Hugging Face commit.
 
 ## Documentation
 
-There's a man page for each of the llamafile programs installed when you
+There's a manual page for each of the llamafile programs installed when you
 run `sudo make install`. The command manuals are also typeset as PDF
 files that you can download from our GitHub releases page. Lastly, most
 commands will display that information when passing the `--help` flag.
+
+## Running llamafile with models downloaded by third-party applications
+
+This section answers the question *"I already have a model downloaded locally by application X, can I use it with llamafile?"*. The general answer is "yes, as long as those models are locally stored in GGUF format" but its implementation can be more or less hacky depending on the application. A few examples (tested on a Mac) follow.
+
+### LM Studio
+[LM Studio](https://lmstudio.ai/) stores downloaded models in `~/.cache/lm-studio/models`, in subdirectories with the same name of the models (following HuggingFace's `account_name/model_name` format), with the same filename you saw when you chose to download the file.
+
+ So if you have downloaded e.g. the `llama-2-7b.Q2_K.gguf` file for `TheBloke/Llama-2-7B-GGUF`, you can run llamafile as follows:
+
+```
+cd ~/.cache/lm-studio/models/TheBloke/Llama-2-7B-GGUF
+llamafile -m llama-2-7b.Q2_K.gguf
+```
+
+### Ollama
+
+When you download a new model with [ollama](https://ollama.com), all its metadata will be stored in a manifest file under `~/.ollama/models/manifests/registry.ollama.ai/library/`. The directory and manifest file name are the model name as returned by `ollama list`. For instance, for `llama3:latest` the manifest file will be named `.ollama/models/manifests/registry.ollama.ai/library/llama3/latest`.
+
+The manifest maps each file related to the model (e.g. GGUF weights, license, prompt template, etc) to a sha256 digest. The digest corresponding to the element whose `mediaType` is `application/vnd.ollama.image.model` is the one referring to the model's GGUF file.
+
+Each sha256 digest is also used as a filename in the `~/.ollama/models/blobs` directory (if you look into that directory you'll see *only* those sha256-* filenames). This means you can directly run llamafile by passing the sha256 digest as the model filename. So if e.g. the `llama3:latest` GGUF file digest is `sha256-00e1317cbf74d901080d7100f57580ba8dd8de57203072dc6f668324ba545f29`, you can run llamafile as follows:
+
+```
+cd ~/.ollama/models/blobs
+llamafile -m sha256-00e1317cbf74d901080d7100f57580ba8dd8de57203072dc6f668324ba545f29
+```
 
 ## Technical details
 
@@ -672,8 +704,8 @@ for further details.
 
 ## A note about models
 
-The example llamafiles provided above should not be interpreted as 
-endorsements or recommendations of specific models, licenses, or data 
+The example llamafiles provided above should not be interpreted as
+endorsements or recommendations of specific models, licenses, or data
 sets on the part of Mozilla.
 
 ## Security

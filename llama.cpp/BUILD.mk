@@ -24,6 +24,7 @@ include llama.cpp/main/BUILD.mk
 include llama.cpp/imatrix/BUILD.mk
 include llama.cpp/quantize/BUILD.mk
 include llama.cpp/perplexity/BUILD.mk
+include llama.cpp/llama-bench/BUILD.mk
 
 $(LLAMA_CPP_OBJS): private				\
 		CCFLAGS +=				\
@@ -31,12 +32,15 @@ $(LLAMA_CPP_OBJS): private				\
 			-DGGML_MULTIPLATFORM		\
 			-DGGML_USE_LLAMAFILE
 
+o/$(MODE)/llama.cpp/common.o				\
+o/$(MODE)/llama.cpp/llama.o: private			\
+		CCFLAGS += -O
+
 o/$(MODE)/llama.cpp/ggml-alloc.o			\
 o/$(MODE)/llama.cpp/ggml-backend.o			\
 o/$(MODE)/llama.cpp/grammar-parser.o			\
 o/$(MODE)/llama.cpp/json-schema-to-grammar.o		\
 o/$(MODE)/llama.cpp/llama.o				\
-o/$(MODE)/llama.cpp/stb_image.o				\
 o/$(MODE)/llama.cpp/unicode.o				\
 o/$(MODE)/llama.cpp/sampling.o				\
 o/$(MODE)/llama.cpp/ggml-alloc.o			\
@@ -66,4 +70,5 @@ o/$(MODE)/llama.cpp: 					\
 		o/$(MODE)/llama.cpp/server		\
 		o/$(MODE)/llama.cpp/imatrix		\
 		o/$(MODE)/llama.cpp/quantize		\
-		o/$(MODE)/llama.cpp/perplexity
+		o/$(MODE)/llama.cpp/perplexity		\
+		o/$(MODE)/llama.cpp/llama-bench

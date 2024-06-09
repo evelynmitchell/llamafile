@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
 //
@@ -16,13 +16,15 @@
 // limitations under the License.
 
 //
-//                   _   _          ___ _      _   ___
-//                  | |_(_)_ _ _  _| _ ) |    /_\ / __|
-//                  |  _| | ' \ || | _ \ |__ / _ \\__ \.
-//                   \__|_|_||_\_, |___/____/_/ \_\___/
-//                             |__/
 //
-//                    BASIC LINEAR ALGEBRA SUBPROGRAMS
+//                                ██████╗ ██╗   █████╗ ██████╗
+//         ██████╗██╗██╗ ██╗██═██╗██╔══██╗██║  ██╔══██╗██╔═══╝
+//         ╚═██╔═╝██║███▄██║██ ██║██████╔╝██║  ███████║██████╗
+//           ██║  ██║██▀███║╚███╔╝██╔══██╗██║  ██╔══██║╔═══██║
+//           ██║  ██║██║ ██║ ███║ ██████╔╝████╗██║  ██║██████║
+//           ╚═╝  ╚═╝╚═╝ ╚═╝ ╚══╝ ╚═════╝ ╚═══╝╚═╝  ╚═╝╚═════╝
+//
+//                   BASIC LINEAR ALGEBRA SUBPROGRAMS
 //
 //
 // This file implements multithreaded CPU matrix multiplication for the
@@ -42,7 +44,6 @@
 
 #include "llama.cpp/ggml-impl.h"
 #include "llama.cpp/ggml-quants.h"
-#include "llamafile.h"
 #include "log.h"
 #include "sgemm.h"
 #include <cosmo.h>
@@ -457,7 +458,7 @@ class tinyBLAS {
             case 0x22:
                 mc = 2;
                 nc = 2;
-                gemm<2, 2, true>(m0, m, n0, n);
+                gemm<2, 2, false>(m0, m, n0, n);
                 break;
             case 0x51:
             case 0x41:
@@ -465,7 +466,7 @@ class tinyBLAS {
             case 0x21:
                 mc = 2;
                 nc = 1;
-                gemm<2, 1, true>(m0, m, n0, n);
+                gemm<2, 1, false>(m0, m, n0, n);
                 break;
             case 0x15:
             case 0x14:
@@ -473,12 +474,12 @@ class tinyBLAS {
             case 0x12:
                 mc = 1;
                 nc = 2;
-                gemm<1, 2, true>(m0, m, n0, n);
+                gemm<1, 2, false>(m0, m, n0, n);
                 break;
             case 0x11:
                 mc = 1;
                 nc = 1;
-                gemm<1, 1, true>(m0, m, n0, n);
+                gemm<1, 1, false>(m0, m, n0, n);
                 break;
             default:
                 return;
@@ -538,25 +539,25 @@ class tinyBLAS {
             case 0x22:
                 mc = 2;
                 nc = 2;
-                gemm<2, 2, true>(m0, m, n0, n);
+                gemm<2, 2, false>(m0, m, n0, n);
                 break;
             case 0x41:
             case 0x31:
             case 0x21:
                 mc = 2;
                 nc = 1;
-                gemm<2, 1, true>(m0, m, n0, n);
+                gemm<2, 1, false>(m0, m, n0, n);
                 break;
             case 0x13:
             case 0x12:
                 mc = 1;
                 nc = 2;
-                gemm<1, 2, true>(m0, m, n0, n);
+                gemm<1, 2, false>(m0, m, n0, n);
                 break;
             case 0x11:
                 mc = 1;
                 nc = 1;
-                gemm<1, 1, true>(m0, m, n0, n);
+                gemm<1, 1, false>(m0, m, n0, n);
                 break;
             default:
                 return;
@@ -622,7 +623,9 @@ class tinyBLAS {
             D Cv[RN][RM] = {};
             D Ce[RN][RM] = {};
             for (long l = 0; l < k; l += KN)
+#pragma GCC unroll 100
                 for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
                     for (int i = 0; i < RM; ++i)
                         if (PRECISE)
                             Cv[j][i] = madder(load<V>(INDEX(A, lda, ii + i, l)), //
@@ -632,7 +635,9 @@ class tinyBLAS {
                             Cv[j][i] = madd(load<V>(INDEX(A, lda, ii + i, l)), //
                                             load<V>(INDEX(B, ldb, jj + j, l)), //
                                             Cv[j][i]);
+#pragma GCC unroll 100
             for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
                 for (int i = 0; i < RM; ++i)
                     store(INDEX(C, ldc, jj + j, ii + i), hsum(Cv[j][i]));
         }
@@ -670,7 +675,7 @@ class tinyBLAS_Q0_ARM {
     NOINLINE void mnpack(long m0, long m, long n0, long n) {
         long mc, nc, mp, np;
 
-        if (!FLAG_precise || (!FLAG_precision_specified && sizeof(TB) == sizeof(block_q4_0))) {
+        if (!FLAG_precise) {
             switch ((MIN(m - m0, 3) << 4) | MIN(n - n0, 3)) {
             case 0x33:
                 mc = 3;
@@ -688,18 +693,18 @@ class tinyBLAS_Q0_ARM {
             case 0x21:
                 mc = 2;
                 nc = 1;
-                gemm<2, 1, true>(m0, m, n0, n);
+                gemm<2, 1, false>(m0, m, n0, n);
                 break;
             case 0x13:
             case 0x12:
                 mc = 1;
                 nc = 2;
-                gemm<1, 2, true>(m0, m, n0, n);
+                gemm<1, 2, false>(m0, m, n0, n);
                 break;
             case 0x11:
                 mc = 1;
                 nc = 1;
-                gemm<1, 1, true>(m0, m, n0, n);
+                gemm<1, 1, false>(m0, m, n0, n);
                 break;
             default:
                 return;
@@ -762,7 +767,9 @@ class tinyBLAS_Q0_ARM {
             float32x4_t Cv[RN][RM] = {};
             float32x4_t Ce[RN][RM] = {};
             for (int l = 0; l < k; ++l)
+#pragma GCC unroll 100
                 for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
                     for (int i = 0; i < RM; ++i) {
                         float32x4_t a = vcvtq_f32_s32(vdotq_s32(
                             vdotq_s32(vdupq_n_s32(0), load_lo(INDEX(A, lda, ii + i, l)),
@@ -775,7 +782,9 @@ class tinyBLAS_Q0_ARM {
                         else
                             Cv[j][i] = vmlaq_n_f32(Cv[j][i], a, b);
                     }
+#pragma GCC unroll 100
             for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
                 for (int i = 0; i < RM; ++i)
                     store(INDEX(C, ldc, jj + j, ii + i), hsum(Cv[j][i]));
         }
@@ -829,7 +838,7 @@ class tinyBLAS_Q0_AVX2 {
         long mc, nc, mp, np;
 
 #if VECTOR_REGISTERS == 32
-        if (!FLAG_precise || (!FLAG_precision_specified && sizeof(TB) == sizeof(block_q4_0))) {
+        if (!FLAG_precise) {
             switch ((MIN(m - m0, 3) << 4) | MIN(n - n0, 3)) {
             case 0x33:
                 mc = 3;
@@ -901,7 +910,7 @@ class tinyBLAS_Q0_AVX2 {
 #endif
 
 #if VECTOR_REGISTERS == 16
-        if (!FLAG_precise || (!FLAG_precision_specified && sizeof(TB) == sizeof(block_q4_0))) {
+        if (!FLAG_precise) {
             switch ((MIN(m - m0, 3) << 4) | MIN(n - n0, 2)) {
             case 0x32:
                 mc = 3;
@@ -922,17 +931,17 @@ class tinyBLAS_Q0_AVX2 {
             case 0x21:
                 mc = 2;
                 nc = 1;
-                gemm<2, 1, true>(m0, m, n0, n);
+                gemm<2, 1, false>(m0, m, n0, n);
                 break;
             case 0x12:
                 mc = 1;
                 nc = 2;
-                gemm<1, 2, true>(m0, m, n0, n);
+                gemm<1, 2, false>(m0, m, n0, n);
                 break;
             case 0x11:
                 mc = 1;
                 nc = 1;
-                gemm<1, 1, true>(m0, m, n0, n);
+                gemm<1, 1, false>(m0, m, n0, n);
                 break;
             default:
                 return;
@@ -982,7 +991,9 @@ class tinyBLAS_Q0_AVX2 {
             __m256 Cv[RN][RM] = {};
             __m256 Ce[RN][RM] = {};
             for (long l = 0; l < k; ++l)
+#pragma GCC unroll 100
                 for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
                     for (int i = 0; i < RM; ++i) {
                         __m256 a = _mm256_set1_ps(unhalf(INDEX(A, lda, ii + i, l)->d) *
                                                   unhalf(INDEX(B, ldb, jj + j, l)->d));
@@ -995,7 +1006,9 @@ class tinyBLAS_Q0_AVX2 {
                         else
                             Cv[j][i] = madd(a, b, Cv[j][i]);
                     }
+#pragma GCC unroll 100
             for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
                 for (int i = 0; i < RM; ++i)
                     store(INDEX(C, ldc, jj + j, ii + i), hsum(Cv[j][i]));
         }

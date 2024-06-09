@@ -4,27 +4,48 @@ on:
     branches: [ master, main, fix ]
   pull_request:
     branches: [ master, main, fix ]
+
 jobs:
-  Tests:
+  ubuntu-focal-make:
     timeout-minutes: 60
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ macos-latest ] # ubuntu-latest, windows-latest are currently non-functional, requiring adaptation for proper functionality. 
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
+      - name: Clone
+        id: checkout
         uses: actions/checkout@v4
+
+      - name: Dependencies
+        id: depends
+        run: |
+          sudo apt-get update
+          sudo apt-get install make
+
+      - name: Cache cosmocc toolchain
+        id: cache-cosmocc-toolchain
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-cosmocc-toolchain
+        with:
+          path: |
+            .cosmocc
+            o/depend
+            o/depend.test
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/config.mk') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}
+
+      - name: Setup cosmocc and ape loader
+        run: |
+          sudo make cosmocc-ci PREFIX=/usr
+
       - name: Build
-        shell: bash
         run: |
-          curl -L -o make https://cosmo.zip/pub/cosmos/bin/make
-          chmod +x make
-          ./make -j8
+          sudo make -j $(nproc)
+
       - name: Make Llamafile
-        shell: bash 
         run: |
-          curl -L -o tinyllama.gguf https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v0.3-GGUF/resolve/main/tinyllama-1.1b-chat-v0.3.Q4_0.gguf
+          cp ./models/TinyLLama-v0.1-5M-F16.gguf tinyllama.gguf
           cat << EoF > .args
           -m
           tinyllama.gguf
@@ -36,7 +57,7 @@ jobs:
             tinyllama.llamafile \
             tinyllama.gguf \
             .args
+
       - name: Execute LLM CLI CPU  # GA doesn't have "support_simdgroup_reduction" for RMS_NORM :'(
-        shell: bash
         run: |
           ./tinyllama.llamafile -e -p '## Famous Speech\n\nFour score and seven' -n 50 -ngl 0

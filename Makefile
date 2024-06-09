@@ -13,11 +13,17 @@ include build/rules.mk
 
 include llamafile/BUILD.mk
 include llama.cpp/BUILD.mk
+include stable-diffusion.cpp/BUILD.mk
+include double-conversion/BUILD.mk
+include stb/BUILD.mk
 
 # the root package is `o//` by default
 # building a package also builds its sub-packages
 .PHONY: o/$(MODE)/
-o/$(MODE)/: o/$(MODE)/llama.cpp o/$(MODE)/llamafile
+o/$(MODE)/:	o/$(MODE)/llamafile					\
+		o/$(MODE)/llama.cpp					\
+		o/$(MODE)/stb						\
+		o/$(MODE)/depend.test
 
 # for installing to `make PREFIX=/usr/local`
 .PHONY: install
@@ -32,6 +38,7 @@ install:	llamafile/zipalign.1					\
 		o/$(MODE)/llama.cpp/main/main				\
 		o/$(MODE)/llama.cpp/imatrix/imatrix			\
 		o/$(MODE)/llama.cpp/quantize/quantize			\
+		o/$(MODE)/llama.cpp/llama-bench/llama-bench		\
 		o/$(MODE)/llama.cpp/perplexity/perplexity		\
 		o/$(MODE)/llama.cpp/llava/llava-quantize
 	mkdir -p $(PREFIX)/bin
@@ -40,7 +47,9 @@ install:	llamafile/zipalign.1					\
 	$(INSTALL) o/$(MODE)/llama.cpp/main/main $(PREFIX)/bin/llamafile
 	$(INSTALL) o/$(MODE)/llama.cpp/imatrix/imatrix $(PREFIX)/bin/llamafile-imatrix
 	$(INSTALL) o/$(MODE)/llama.cpp/quantize/quantize $(PREFIX)/bin/llamafile-quantize
+	$(INSTALL) o/$(MODE)/llama.cpp/llama-bench/llama-bench $(PREFIX)/bin/llamafile-bench
 	$(INSTALL) build/llamafile-convert $(PREFIX)/bin/llamafile-convert
+	$(INSTALL) build/llamafile-upgrade-engine $(PREFIX)/bin/llamafile-upgrade-engine
 	$(INSTALL) o/$(MODE)/llama.cpp/perplexity/perplexity $(PREFIX)/bin/llamafile-perplexity
 	$(INSTALL) o/$(MODE)/llama.cpp/llava/llava-quantize $(PREFIX)/bin/llava-quantize
 	mkdir -p $(PREFIX)/share/man/man1
@@ -53,6 +62,12 @@ install:	llamafile/zipalign.1					\
 
 .PHONY: check
 check: o/$(MODE)/llamafile/check
+
+.PHONY: check
+cosmocc: $(COSMOCC) # cosmocc toolchain setup
+
+.PHONY: check
+cosmocc-ci: $(COSMOCC) $(PREFIX)/bin/ape # cosmocc toolchain setup in ci context
 
 include build/deps.mk
 include build/tags.mk

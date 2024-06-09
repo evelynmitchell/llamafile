@@ -16,6 +16,10 @@ o/$(MODE)/%.o: %.cc $(COSMOCC)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) -o $@ $<
 
+o/$(MODE)/%.o: %.cc $(COSMOCC)
+	@mkdir -p $(@D)
+	$(COMPILE.cc) -o $@ $<
+
 o/$(MODE)/%.o: %.cpp $(COSMOCC)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) -o $@ $<
@@ -39,3 +43,7 @@ o/$(MODE)/%.zip.o: % $(COSMOCC)
 	@mkdir -p $(dir $@)/.aarch64
 	$(ZIPOBJ) $(ZIPOBJ_FLAGS) -a x86_64 -o $@ $<
 	$(ZIPOBJ) $(ZIPOBJ_FLAGS) -a aarch64 -o $(dir $@)/.aarch64/$(notdir $@) $<
+
+$(PREFIX)/bin/ape: $(COSMOCC) # cosmocc toolchain setup in restricted ci context 
+	$(INSTALL) $(COSMOCC)/bin/ape-$(ARCH).elf $(PREFIX)/bin/ape
+	echo ':APE:M::MZqFpD::/usr/bin/ape:' > /proc/sys/fs/binfmt_misc/register

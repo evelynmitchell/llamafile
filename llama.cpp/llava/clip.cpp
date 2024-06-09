@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 
 // NOTE: This is modified from clip.cpp only for LLaVA,
 // so there might be still unnecessary artifacts hanging around
@@ -23,8 +23,8 @@
 #include "llama.cpp/llava/clip.h"
 #include "llama.cpp/ggml-metal.h"
 #include "llama.cpp/ggml-cuda.h"
-#include "llama.cpp/stb_image.h"
 #include "llama.cpp/ggml.h"
+#include "stb/stb_image.h"
 
 //#define CLIP_DEBUG_FUNCTIONS
 
@@ -140,7 +140,8 @@ static std::map<projector_type, std::string> PROJECTOR_TYPE_NAMES = {
 static int get_key_idx(const gguf_context * ctx, const char * key) {
     int i = gguf_find_key(ctx, key);
     if (i == -1) {
-        LOG_TEE("key %s not found in file\n", key);
+        // [jart] don't log to console errors that aren't errors
+        LOG("%s: note: key %s not found in file\n", __func__, key);
         throw std::runtime_error(format("Missing required key: %s", key));
     }
 
@@ -567,13 +568,13 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
     struct ggml_tensor * embeddings = inp;
     if (ctx->has_class_embedding) {
         embeddings = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, hidden_size, num_positions, batch_size);
+        ggml_set_name(embeddings, "embeddings");
+        ggml_set_input(embeddings);
         embeddings = ggml_acc(ctx0, embeddings, model.class_embedding,
                 embeddings->nb[1], embeddings->nb[2], embeddings->nb[3], 0);
         embeddings = ggml_acc(ctx0, embeddings, inp,
                 embeddings->nb[1], embeddings->nb[2], embeddings->nb[3], model.class_embedding->nb[1]);
     }
-    ggml_set_name(embeddings, "embeddings");
-    ggml_set_input(embeddings);
 
 
     struct ggml_tensor * positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, num_positions);
@@ -1838,7 +1839,7 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
     const int image_size    = hparams.image_size;
     const int patch_size    = hparams.patch_size;
     const int num_patches   = ((image_size / patch_size) * (image_size / patch_size));
-    const int num_positions = num_patches + 1;
+    const int num_positions = num_patches + (ctx->has_class_embedding ? 1 : 0);
 
     {
         struct ggml_tensor * inp_raw = ggml_graph_get_tensor(gf, "inp_raw");
@@ -1866,12 +1867,14 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
     }
 
     {
-        struct ggml_tensor * embeddings = ggml_graph_get_tensor(gf, "embeddings");
+        if (ctx->has_class_embedding) {
+            struct ggml_tensor * embeddings = ggml_graph_get_tensor(gf, "embeddings");
 
-        void* zero_mem = malloc(ggml_nbytes(embeddings));
-        memset(zero_mem, 0, ggml_nbytes(embeddings));
-        ggml_backend_tensor_set(embeddings, zero_mem, 0, ggml_nbytes(embeddings));
-        free(zero_mem);
+            void* zero_mem = malloc(ggml_nbytes(embeddings));
+            memset(zero_mem, 0, ggml_nbytes(embeddings));
+            ggml_backend_tensor_set(embeddings, zero_mem, 0, ggml_nbytes(embeddings));
+            free(zero_mem);
+        }
     }
 
     {

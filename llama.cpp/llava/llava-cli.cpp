@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 
 #include "llama.cpp/ggml.h"
 #include "llama.cpp/common.h"
@@ -120,7 +120,8 @@ struct llava_context * volatile g_ctx;
 static void sigint_handler(int signo) {
     if (signo == SIGINT) {
         printf("\n");
-        llama_print_timings(g_ctx->ctx_llama);
+        if (g_ctx)
+            llama_print_timings(g_ctx->ctx_llama);
         _exit(128 + SIGINT);
     }
 }
@@ -202,6 +203,11 @@ static void process_prompt(struct llava_context * ctx_llava, struct llava_image_
     LOG_TEE("\n");
 
     struct llama_sampling_context * ctx_sampling = llama_sampling_init(params->sparams);
+    if (!ctx_sampling) {
+        fprintf(stderr, "%s: failed to initialize sampling subsystem\n", __func__);
+        exit(1);
+    }
+
     std::string response = "";
     for (int i = 0; i < max_tgt_len; i++) {
         const char * tmp = sample(ctx_sampling, ctx_llava->ctx_llama, &n_past);
@@ -256,6 +262,7 @@ static struct llava_context * llava_init_context(gpt_params * params, llama_mode
     }
 
     auto ctx_llava = (struct llava_context *)malloc(sizeof(llava_context));
+    g_ctx = ctx_llava; // [jart] nosync
 
     ctx_llava->ctx_llama = ctx_llama;
     ctx_llava->ctx_clip = ctx_clip;
@@ -291,14 +298,13 @@ int llava_cli(int argc, char ** argv, gpt_params & params) {
 
 #ifndef LOG_DISABLE_LOGS
     log_set_target(log_filename_generator("llava", "log"));
-    LOG_TEE("Log start\n");
     log_dump_cmdline(argc, argv);
     llama_log_set(llama_log_callback_logTee, nullptr);
 #endif // LOG_DISABLE_LOGS
 
     if (params.mmproj.empty() || (params.image.empty() && !prompt_contains_image(params.prompt))) {
         gpt_print_usage(argc, argv, params);
-        show_additional_info(argc, argv);
+        // show_additional_info(argc, argv); // [jart] no help unless we ask for it
         return 1;
     }
     auto model = llava_init(&params);
@@ -307,14 +313,10 @@ int llava_cli(int argc, char ** argv, gpt_params & params) {
         return 1;
     }
 
-    for (auto & image : params.image) {
+    if (prompt_contains_image(params.prompt)) {
         auto ctx_llava = llava_init_context(&params, model);
 
-        auto image_embed = load_image(ctx_llava, &params, image);
-        if (!image_embed) {
-            std::cerr << "error: failed to load image " << image << ". Terminating\n\n";
-            return 1;
-        }
+        auto image_embed = load_image(ctx_llava, &params, "");
 
         // process the prompt
         process_prompt(ctx_llava, image_embed, &params, params.prompt);
@@ -323,7 +325,26 @@ int llava_cli(int argc, char ** argv, gpt_params & params) {
         llava_image_embed_free(image_embed);
         ctx_llava->model = NULL;
         llava_free(ctx_llava);
+    } else {
+        for (auto & image : params.image) {
+            auto ctx_llava = llava_init_context(&params, model);
+
+            auto image_embed = load_image(ctx_llava, &params, image);
+            if (!image_embed) {
+                std::cerr << "error: failed to load image " << image << ". Terminating\n\n";
+                return 1;
+            }
+
+            // process the prompt
+            process_prompt(ctx_llava, image_embed, &params, params.prompt);
+
+            llama_print_timings(ctx_llava->ctx_llama);
+            llava_image_embed_free(image_embed);
+            ctx_llava->model = NULL;
+            llava_free(ctx_llava);
+        }
     }
+
     llama_free_model(model);
 
     return 0;

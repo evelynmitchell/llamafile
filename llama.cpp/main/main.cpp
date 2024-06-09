@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 
 #include <cassert>
 #include <cinttypes>
@@ -179,7 +179,6 @@ int main(int argc, char ** argv) {
 
 #ifndef LOG_DISABLE_LOGS
     log_set_target(log_filename_generator("main", "log"));
-    LOG_TEE("Log start\n");
     log_dump_cmdline(argc, argv);
     llama_log_set(llama_log_callback_logTee, nullptr);
 #endif // LOG_DISABLE_LOGS
@@ -206,7 +205,7 @@ int main(int argc, char ** argv) {
         }
         __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
         if (pledge(0, 0)) {
-            LOG_TEE("warning: this OS doesn't support pledge() security\n");
+            LOG("warning: this OS doesn't support pledge() security\n");
         } else if (pledge(promises, 0)) {
             perror("pledge");
             exit(1);
@@ -447,6 +446,9 @@ int main(int argc, char ** argv) {
         params.interactive_first = true;
         params.antiprompt.emplace_back("<|im_start|>user\n");
     }
+    else if (params.conversation) {
+        params.interactive_first = true;
+    }
 
     // enable interactive mode if interactive start is specified
     if (params.interactive_first) {
@@ -595,6 +597,10 @@ int main(int argc, char ** argv) {
     }
 
     struct llama_sampling_context * ctx_sampling = llama_sampling_init(sparams);
+    if (!ctx_sampling) {
+        fprintf(stderr, "%s: failed to initialize sampling subsystem\n", __func__);
+        exit(1);
+    }
 
     while ((n_remain != 0 && !is_antiprompt) || params.interactive) {
         // predict
@@ -619,7 +625,7 @@ int main(int argc, char ** argv) {
                 // if we run out of context:
                 // - take the n_keep first tokens from the original prompt (via n_past)
                 // - take half of the last (n_ctx - n_keep) tokens and recompute the logits in batches
-                if (n_past + (int) embd.size() + std::max<int>(0, guidance_offset) > n_ctx) {
+                if (n_past + (int) embd.size() + std::max<int>(0, guidance_offset) >= n_ctx) {
                     if (params.n_predict == -2) {
                         LOG_TEE("\n\n%s: context full and n_predict == -%d => stopping\n", __func__, params.n_predict);
                         break;
@@ -775,7 +781,7 @@ int main(int argc, char ** argv) {
 
             const llama_token id = llama_sampling_sample(ctx_sampling, ctx, ctx_guidance);
 
-            llama_sampling_accept(ctx_sampling, ctx, id, true);
+            llama_sampling_accept(ctx_sampling, ctx, id, /* apply_grammar= */ true);
 
             LOG("last: %s\n", LOG_TOKENS_TOSTR_PRETTY(ctx, ctx_sampling->prev).c_str());
 
@@ -796,7 +802,7 @@ int main(int argc, char ** argv) {
 
                 // push the prompt in the sampling context in order to apply repetition penalties later
                 // for the prompt, we don't apply grammar rules
-                llama_sampling_accept(ctx_sampling, ctx, embd_inp[n_consumed], false);
+                llama_sampling_accept(ctx_sampling, ctx, embd_inp[n_consumed], /* apply_grammar= */ false);
 
                 ++n_consumed;
                 if ((int) embd.size() >= params.n_batch) {
@@ -808,7 +814,8 @@ int main(int argc, char ** argv) {
         // display text
         if (input_echo && display) {
             for (auto id : embd) {
-                const std::string token_str = llama_token_to_piece(ctx, id);
+                // [jart] don't print special tokens until its design stabilizes
+                const std::string token_str = llama_token_to_piece(ctx, id, false);
                 printf("%s", token_str.c_str());
 
                 if (embd.size() > 1) {
@@ -871,7 +878,7 @@ int main(int argc, char ** argv) {
 
             // deal with end of generation tokens in interactive mode
             if (llama_token_is_eog(model, llama_sampling_last(ctx_sampling))) {
-                LOG("found EOS token\n");
+                LOG("found an EOG token\n");
 
                 if (params.interactive) {
                     if (!params.antiprompt.empty()) {
@@ -891,7 +898,7 @@ int main(int argc, char ** argv) {
             if (n_past > 0 && is_interacting) {
                 LOG("waiting for user input\n");
 
-                if (params.instruct || params.chatml) {
+                if (params.conversation || params.instruct || params.chatml) {
                     printf("\n> ");
                 }
 
@@ -901,7 +908,7 @@ int main(int argc, char ** argv) {
                 }
 
                 std::string buffer;
-                if (!params.input_prefix.empty()) {
+                if (!params.input_prefix.empty() && !params.conversation) {
                     LOG("appending input prefix: '%s'\n", params.input_prefix.c_str());
                     printf("%s", params.input_prefix.c_str());
                 }
@@ -925,7 +932,7 @@ int main(int argc, char ** argv) {
                 // Entering a empty line lets the user pass control back
                 if (buffer.length() > 1) {
                     // append input suffix if any
-                    if (!params.input_suffix.empty()) {
+                    if (!params.input_suffix.empty() && !params.conversation) {
                         LOG("appending input suffix: '%s'\n", params.input_suffix.c_str());
                         printf("%s", params.input_suffix.c_str());
                     }
@@ -951,7 +958,7 @@ int main(int argc, char ** argv) {
                     }
 
                     const auto line_pfx = ::llama_tokenize(ctx, params.input_prefix, false, true);
-                    const auto line_inp = ::llama_tokenize(ctx, buffer,              false, false);
+                    const auto line_inp = ::llama_tokenize(ctx, buffer,              false, params.interactive_specials);
                     const auto line_sfx = ::llama_tokenize(ctx, params.input_suffix, false, true);
 
                     LOG("input tokens: %s\n", LOG_TOKENS_TOSTR_PRETTY(ctx, line_inp).c_str());

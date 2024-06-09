@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 #ifndef LLAMA_H
 #define LLAMA_H
 
@@ -81,6 +81,12 @@ extern "C" {
         LLAMA_VOCAB_PRE_TYPE_MPT            = 5,
         LLAMA_VOCAB_PRE_TYPE_STARCODER      = 6,
         LLAMA_VOCAB_PRE_TYPE_GPT2           = 7,
+        LLAMA_VOCAB_PRE_TYPE_REFACT         = 8,
+        LLAMA_VOCAB_PRE_TYPE_COMMAND_R      = 9,
+        LLAMA_VOCAB_PRE_TYPE_STABLELM2      = 10,
+        LLAMA_VOCAB_PRE_TYPE_QWEN2          = 11,
+        LLAMA_VOCAB_PRE_TYPE_OLMO           = 12,
+        LLAMA_VOCAB_PRE_TYPE_DBRX           = 13,
     };
 
     // note: these values should be synchronized with ggml_rope
@@ -174,7 +180,7 @@ extern "C" {
         bool sorted;
     } llama_token_data_array;
 
-    typedef bool (*llama_progress_callback)(float progress, void *ctx);
+    typedef bool (*llama_progress_callback)(float progress, void * user_data);
 
     // Input data for llama_decode
     // A llama_batch object can contain input about one or many sequences
@@ -238,6 +244,9 @@ extern "C" {
 
         // proportion of the model (layers or rows) to offload to each GPU, size: llama_max_devices()
         const float * tensor_split;
+
+        // comma separated list of RPC servers to use for offloading
+        const char * rpc_servers;
 
         // Called with a progress value between 0.0 and 1.0. Pass NULL to disable.
         // If the provided progress_callback returns true, model loading continues.
@@ -773,7 +782,7 @@ extern "C" {
 
     // Logits for the ith token. For positive indices, Equivalent to:
     // llama_get_logits(ctx) + ctx->output_ids[i]*n_vocab
-    // Negative indicies can be used to access logits in reverse order, -1 is the last logit.
+    // Negative indices can be used to access logits in reverse order, -1 is the last logit.
     // returns NULL for invalid ids.
     LLAMA_API float * llama_get_logits_ith(struct llama_context * ctx, int32_t i);
 
@@ -787,7 +796,7 @@ extern "C" {
 
     // Get the embeddings for the ith token. For positive indices, Equivalent to:
     // llama_get_embeddings(ctx) + ctx->output_ids[i]*n_embd
-    // Negative indicies can be used to access embeddings in reverse order, -1 is the last embedding.
+    // Negative indices can be used to access embeddings in reverse order, -1 is the last embedding.
     // shape: [n_embd] (1-dimensional)
     // returns NULL for invalid ids.
     LLAMA_API float * llama_get_embeddings_ith(struct llama_context * ctx, int32_t i);

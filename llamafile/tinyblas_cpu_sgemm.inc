@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
 //
@@ -18,13 +18,15 @@
 #include "tinyblas_cpu.h"
 
 //
-//                   _   _          ___ _      _   ___
-//                  | |_(_)_ _ _  _| _ ) |    /_\ / __|
-//                  |  _| | ' \ || | _ \ |__ / _ \\__ \.
-//                   \__|_|_||_\_, |___/____/_/ \_\___/
-//                             |__/
 //
-//                    BASIC LINEAR ALGEBRA SUBPROGRAMS
+//                                ██████╗ ██╗   █████╗ ██████╗
+//         ██████╗██╗██╗ ██╗██═██╗██╔══██╗██║  ██╔══██╗██╔═══╝
+//         ╚═██╔═╝██║███▄██║██ ██║██████╔╝██║  ███████║██████╗
+//           ██║  ██║██▀███║╚███╔╝██╔══██╗██║  ██╔══██║╔═══██║
+//           ██║  ██║██║ ██║ ███║ ██████╔╝████╗██║  ██║██████║
+//           ╚═╝  ╚═╝╚═╝ ╚═╝ ╚══╝ ╚═════╝ ╚═══╝╚═╝  ╚═╝╚═════╝
+//
+//                   BASIC LINEAR ALGEBRA SUBPROGRAMS
 //
 //
 // This file implements multithreaded CPU matrix multiplication for the
@@ -83,7 +85,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
         if (k % 32)
             return NOT_SUPPORTED;
         if (Btype == GGML_TYPE_F32 && n < 2) {
-            tinyBLAS<0, 32, __m512, __m512bh, ggml_bf16_t, float, TC> tb{
+            tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, float, TC> tb{
                 k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
             tb.matmul(m, n, task);
             return true;
@@ -92,10 +94,17 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return WANT_QUANTIZATION;
         if (Btype != GGML_TYPE_BF16)
             return NOT_SUPPORTED;
-        tinyBLAS<0, 32, __m512, __m512bh, ggml_bf16_t, ggml_bf16_t, TC> tb{
-            k, (const ggml_bf16_t *)A, lda, (const ggml_bf16_t *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n, task);
-        return true;
+        if (!FLAG_precise) {
+            tinyBLAS<0, 32, __m512, __m512bh, ggml_bf16_t, ggml_bf16_t, TC> tb{
+                k, (const ggml_bf16_t *)A, lda, (const ggml_bf16_t *)B, ldb, C, ldc, ith, nth};
+            tb.matmul(m, n, task);
+            return true;
+        } else {
+            tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, ggml_bf16_t, TC> tb{
+                k, (const ggml_bf16_t *)A, lda, (const ggml_bf16_t *)B, ldb, C, ldc, ith, nth};
+            tb.matmul(m, n, task);
+            return true;
+        }
 #elif defined(__AVX512F__)
         if (k % 16)
             return NOT_SUPPORTED;
@@ -145,7 +154,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
         tb.matmul(m, n, task);
         return true;
 #elif (defined(__AVX__) || defined(__AVX2__)) && defined(__F16C__)
-        if (X86_HAVE(F16C)) {
+        if (X86_CHECK(F16C)) {
             if (k % 8)
                 return NOT_SUPPORTED;
             if (Btype == GGML_TYPE_F32 && n < 2) {
@@ -166,7 +175,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return NOT_SUPPORTED;
         }
 #elif defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && !defined(_MSC_VER)
-        if (n < 2)
+        if (n < 2 && !FLAG_precise)
             // TODO(jart): Why is ggml_vec_dot_f16_unroll() so fast at matvec?
             return NOT_SUPPORTED;
         if (precision == GGML_PREC_F32) {
@@ -191,7 +200,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return true;
         }
 #elif defined(__ARM_NEON) && !defined(_MSC_VER)
-        if (n < 2)
+        if (n < 2 && !FLAG_precise)
             // TODO(jart): Why is ggml_vec_dot_f16_unroll() so fast at matvec?
             return NOT_SUPPORTED;
         if (k % 4)
@@ -313,16 +322,40 @@ bool llamafile_sgemm(long m, long n, long k, const void *A, long lda, const void
     assert(nth > 0);
     assert(ith < nth);
 
+#if QK_K == 256
+#if defined(__x86_64__)
+    if (X86_CHECK(AVX2) && X86_CHECK(FMA)) {
+        if (Btype == GGML_TYPE_Q8_K && Ctype == GGML_TYPE_F32) {
+            if (iqk_mul_mat(m, n, k * QK_K, Atype, A, B, (float *)C, ldc, ith, nth)) {
+                return true;
+            }
+        }
+        if ((Btype == GGML_TYPE_Q8_0 || Btype == GGML_TYPE_Q8_1) && Ctype == GGML_TYPE_F32) {
+            assert(QK8_0 == QK8_1 == QK4_0 == QK4_1 == QK5_0 == QK5_1 == 32);
+            if (iqk_mul_mat(m, n, k * QK8_0, Atype, A, B, (float *)C, ldc, ith, nth)) {
+                return true;
+            }
+        }
+    }
+#elif defined __aarch64__ && defined __ARM_FEATURE_DOTPROD && !defined _MSC_VER
+    if (Btype == GGML_TYPE_Q8_K && Ctype == GGML_TYPE_F32) {
+        if (iqk_mul_mat(m, n, k * QK_K, Atype, A, B, (float *)C, ldc, ith, nth)) {
+            return true;
+        }
+    }
+    if ((Btype == GGML_TYPE_Q8_0 || Btype == GGML_TYPE_Q8_1) && Ctype == GGML_TYPE_F32) {
+        assert(QK8_0 == QK8_1 == QK4_0 == QK4_1 == QK5_0 == QK5_1 == 32);
+        if (iqk_mul_mat(m, n, k * QK8_0, Atype, A, B, (float *)C, ldc, ith, nth)) {
+            return true;
+        }
+    }
+#endif
+#endif
+
     switch (Ctype) {
     case GGML_TYPE_F32:
         return llamafile_sgemm_impl(m, n, k, A, lda, B, ldb, (float *)C, ldc, ith, nth, task, Atype,
                                     Btype, Ctype, precision);
-    case GGML_TYPE_BF16:
-        return llamafile_sgemm_impl(m, n, k, A, lda, B, ldb, (ggml_bf16_t *)C, ldc, ith, nth, task,
-                                    Atype, Btype, Ctype, precision);
-    case GGML_TYPE_F16:
-        return llamafile_sgemm_impl(m, n, k, A, lda, B, ldb, (ggml_fp16_t *)C, ldc, ith, nth, task,
-                                    Atype, Btype, Ctype, precision);
     default:
         return NOT_SUPPORTED;
     }

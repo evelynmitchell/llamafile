@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
 //
@@ -18,13 +18,15 @@
 #include "tinyblas_cpu.h"
 
 //
-//                   _   _          ___ _      _   ___
-//                  | |_(_)_ _ _  _| _ ) |    /_\ / __|
-//                  |  _| | ' \ || | _ \ |__ / _ \\__ \.
-//                   \__|_|_||_\_, |___/____/_/ \_\___/
-//                             |__/
 //
-//                 MIXTURE OF EXPERTS TENSOR MULTIPLICATION
+//                                ██████╗ ██╗   █████╗ ██████╗
+//         ██████╗██╗██╗ ██╗██═██╗██╔══██╗██║  ██╔══██╗██╔═══╝
+//         ╚═██╔═╝██║███▄██║██ ██║██████╔╝██║  ███████║██████╗
+//           ██║  ██║██▀███║╚███╔╝██╔══██╗██║  ██╔══██║╔═══██║
+//           ██║  ██║██║ ██║ ███║ ██████╔╝████╗██║  ██║██████║
+//           ╚═╝  ╚═╝╚═╝ ╚═╝ ╚══╝ ╚═════╝ ╚═══╝╚═╝  ╚═╝╚═════╝
+//
+//               MIXTURE OF EXPERTS TENSOR MULTIPLICATION
 //
 //
 // SHAPES
@@ -147,10 +149,6 @@ class MixMul {
         switch (result->type) {
         case GGML_TYPE_F32:
             return mixmuler<float>();
-        case GGML_TYPE_BF16:
-            return mixmuler<ggml_bf16_t>();
-        case GGML_TYPE_F16:
-            return mixmuler<ggml_fp16_t>();
         default:
             return false;
         }
@@ -184,9 +182,15 @@ class MixMul {
             if (thought->type != GGML_TYPE_F32 && thought->type != GGML_TYPE_BF16)
                 return false;
 #if defined(__AVX512BF16__)
-            return mixmat<32, 1,
-                          tinyBLAS<NCB | NCC, 32, __m512, __m512bh, ggml_bf16_t, ggml_bf16_t, TC>,
-                          ggml_bf16_t, ggml_bf16_t, TC>();
+            if (!FLAG_precise) {
+                return mixmat<
+                    32, 1, tinyBLAS<NCB | NCC, 32, __m512, __m512bh, ggml_bf16_t, ggml_bf16_t, TC>,
+                    ggml_bf16_t, ggml_bf16_t, TC>();
+            } else {
+                return mixmat<16, 1,
+                              tinyBLAS<NCB | NCC, 16, __m512, __m512, ggml_bf16_t, ggml_bf16_t, TC>,
+                              ggml_bf16_t, ggml_bf16_t, TC>();
+            }
 #elif defined(__AVX512F__)
             return mixmat<16, 1,
                           tinyBLAS<NCB | NCC, 16, __m512, __m512, ggml_bf16_t, ggml_bf16_t, TC>,
@@ -212,7 +216,7 @@ class MixMul {
                           tinyBLAS<NCB | NCC, 16, __m512, __m512, ggml_fp16_t, ggml_fp16_t, TC>,
                           ggml_fp16_t, ggml_fp16_t, TC>();
 #elif (defined(__AVX__) || defined(__AVX2__)) && defined(__F16C__)
-            if (X86_HAVE(F16C)) {
+            if (X86_CHECK(F16C)) {
                 return mixmat<8, 1,
                               tinyBLAS<NCB | NCC, 8, __m256, __m256, ggml_fp16_t, ggml_fp16_t, TC>,
                               ggml_fp16_t, ggml_fp16_t, TC>();

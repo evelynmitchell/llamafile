@@ -1,14 +1,16 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+
 #include "llama.cpp/common.h"
 #include "llama.cpp/llama.h"
 #include "llama.cpp/grammar-parser.h"
 #include "llama.cpp/llava/llava.h"
-#include "llama.cpp/stb_image.h"
+#include "stb/stb_image.h"
 #include "utils.h"
 #include "oai.h"
 #include "llamafile/micros.h"
 #include "llamafile/llamafile.h"
+#include "llamafile/debug.h"
 #include "macsandbox.h"
 
 // increase max payload length to allow use of larger context size
@@ -864,11 +866,16 @@ struct llama_server_context
             }
         }
 
-        if (slot->ctx_sampling != nullptr)
-        {
+        if (slot->ctx_sampling != nullptr) {
             llama_sampling_free(slot->ctx_sampling);
         }
         slot->ctx_sampling = llama_sampling_init(slot->sparams);
+        if (slot->ctx_sampling == nullptr) {
+            // for now, the only error that may happen here is invalid grammar
+            LOG_TEE("%s: failed to initialize sampling subsystem\n", __func__);
+            return false;
+        }
+
         llama_set_rng_seed(ctx, slot->params.seed);
         slot->command = LOAD_PROMPT;
 
@@ -1286,42 +1293,40 @@ struct llama_server_context
         res.multitask_id = slot.multitask_id;
         res.error = false;
         res.stop = true;
-
-        const int n_embd = llama_n_embd(model);
-        if (!params.embedding)
-        {
-            LOG_WARNING("embedding disabled", {
-                                                  {"params.embedding", params.embedding},
-                                              });
-            res.result_json = json
-            {
-                {"embedding", std::vector<float>(n_embd, 0.0f)},
-            };
+        int n_embd = llama_n_embd(model);
+        if (n_embd > 16777216u) {
+            LOG_ERROR("model has more than 2**24 embeddings (please report this)", {{"n_embd", n_embd}});
+            n_embd = 0;
         }
-        else
-        {
-            std::vector<float> embd_res(n_embd, 0.0f);
-
-            for (int i = 0; i < batch.n_tokens; i++) {
-                const float * embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
-                if (embd == NULL) {
-                    embd = llama_get_embeddings_ith(ctx, i);
-                }
-                if (embd == NULL) {
-                    LOG_ERROR("failed to get embeddings", {
+        std::vector<float> embd_res(n_embd);
+        for (int i = 0; i < batch.n_tokens; i++) {
+            if (!batch.logits[i])
+                continue;
+            const float * embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
+            if (embd == NULL)
+                embd = llama_get_embeddings_ith(ctx, i);
+            if (embd == NULL) {
+                LOG_ERROR("failed to get embeddings (please report this)", {
                         {"token",  batch.token [i]},
                         {"seq_id", batch.seq_id[i][0]}
                     });
-                    res.result_json = json {
-                            {"embedding", std::vector<float>(n_embd, 0.0f)},
-                    };
-                    continue;
-                }
-                llama_embd_normalize(embd, embd_res.data(), n_embd);
-                res.result_json = json {
-                        {"embedding", embd_res},
-                };
+                continue;
             }
+            float * beg = &embd_res[0];
+            float * end = beg + embd_res.size();
+            float * out = beg + batch.seq_id[i][0] * n_embd;
+            if (beg <= out && out + n_embd <= end) {
+                llama_embd_normalize(embd, out, n_embd);
+            } else {
+                LOG_ERROR("embeddings out of bounds (please report this)", {
+                        {"token",  batch.token [i]},
+                        {"seq_id", batch.seq_id[i][0]}
+                    });
+                continue;
+            }
+            res.result_json = json {
+                {"embedding", embd_res},
+            };
         }
         queue_results.send(res);
     }
@@ -1372,6 +1377,7 @@ struct llama_server_context
     bool ingest_images(llama_client_slot &slot, int n_batch)
     {
         int image_idx = 0;
+        std::string prompt = "";
 
         while (image_idx < (int) slot.images.size())
         {
@@ -1433,6 +1439,11 @@ struct llama_server_context
                 slot.params.input_suffix : // no more images, then process suffix prompt
                 (json)(slot.images[image_idx].prefix_prompt);
 
+            // rebuild the prompt since it was cleared earlier
+            prompt += img.prefix_prompt;
+            prompt += "[img-" + std::to_string(img.id) + "]";
+            prompt += json_prompt;
+
             std::vector<llama_token> append_tokens = tokenize(json_prompt, false); // has next image
             for (int i = 0; i < (int) append_tokens.size(); ++i)
             {
@@ -1440,6 +1451,13 @@ struct llama_server_context
                 slot.n_past += 1;
             }
         }
+
+        // There is no prompt caching in multimodal currently
+        slot.num_prompt_tokens = slot.n_past;
+        slot.num_prompt_tokens_processed = slot.n_past;
+
+        // prompt for multimodal is set to empty to avoid processing those tokens here
+        slot.prompt = prompt;
 
         return true;
     }
@@ -1491,7 +1509,7 @@ struct llama_server_context
                 {
                     // if no slot is available, we defer this task for processing later
                     LOG_VERBOSE("no slot is available", {{"task_id", task.id}});
-                    queue_tasks.defer(task);
+                    queue_tasks.defer_(task);
                     break;
                 }
 
@@ -2525,12 +2543,10 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
         else if (arg == "--fast")
         {
             FLAG_precise = false;
-            FLAG_precision_specified = true;
         }
         else if (arg == "--precise")
         {
             FLAG_precise = true;
-            FLAG_precision_specified = true;
         }
         else if (arg == "--trap")
         {

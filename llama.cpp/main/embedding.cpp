@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 
 #include "llama.cpp/common.h"
 #include "llama.cpp/llama.h"
@@ -78,7 +78,6 @@ int embedding_cli(int argc, char ** argv) {
 
 #ifndef LOG_DISABLE_LOGS
     log_set_target(stderr);
-    LOG_TEE("Log start\n");
     log_dump_cmdline(argc, argv);
     llama_log_set(llama_log_callback_logTee, nullptr);
 #endif // LOG_DISABLE_LOGS

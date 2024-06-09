@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
 //
@@ -26,35 +26,47 @@
 static const struct GemmFuncs {
     typeof(llamafile_sgemm) *sgemm;
     typeof(llamafile_mixmul) *mixmul;
+    typeof(llamafile_mixmul_iqk) *iqk_mixmul = iqk_mul_mat_moe_unsupported;
     GemmFuncs() {
 #ifdef __x86_64__
         if (X86_HAVE(AVX)) {
             if (X86_HAVE(FMA)) {
                 if (X86_HAVE(AVX2)) {
                     if (X86_HAVE(AVX512F)) {
-                        if (X86_HAVE(AVX512VL) && X86_HAVE(AVX512_VNNI) && X86_HAVE(AVX512_BF16)) {
+                        if (X86_HAVE(AVX512VL) && //
+                            X86_HAVE(AVX512BW) && //
+                            X86_HAVE(AVX512DQ) && //
+                            X86_HAVE(AVX512_VNNI) && //
+                            X86_HAVE(AVX512_BF16)) {
                             // AMD Zen4+ (2023-)
                             sgemm = llamafile_sgemm_amd_zen4;
                             mixmul = llamafile_mixmul_amd_zen4;
+                            iqk_mixmul = iqk_mul_mat_moe_zen4;
                         } else {
                             // Intel Xeon Skylake+ (2015-)
                             sgemm = llamafile_sgemm_amd_avx512f;
                             mixmul = llamafile_mixmul_amd_avx512f;
+                            iqk_mixmul = iqk_mul_mat_moe;
                         }
                     } else if (X86_HAVE(AVXVNNI)) {
                         // Intel Alderlake (2021-)
                         sgemm = llamafile_sgemm_amd_avxvnni;
                         mixmul = llamafile_mixmul_amd_avxvnni;
+                        iqk_mixmul = iqk_mul_mat_moe;
                     } else {
                         // Intel Haswell/Broadwell/Skylake (2013-2020)
                         // AMD Excavator (2015-2022)
                         sgemm = llamafile_sgemm_amd_avx2;
                         mixmul = llamafile_mixmul_amd_avx2;
+                        if (X86_HAVE(F16C))
+                            iqk_mixmul = iqk_mul_mat_moe;
                     }
                 } else {
                     // AMD Piledriver (2011-2014)
                     sgemm = llamafile_sgemm_amd_fma;
                     mixmul = llamafile_mixmul_amd_fma;
+                    if (X86_HAVE(F16C))
+                        iqk_mixmul = iqk_mul_mat_moe;
                 }
             } else {
                 // Intel Sandybridge/Ivybridge (2010-2012)
@@ -76,6 +88,7 @@ static const struct GemmFuncs {
             // e.g. Apple M1, Raspberry Pi 5
             sgemm = llamafile_sgemm_arm82;
             mixmul = llamafile_mixmul_arm82;
+            iqk_mixmul = iqk_mul_mat_moe_arm82;
         } else {
             // ARM64 baseline ISA
             sgemm = llamafile_sgemm_arm80;
@@ -127,4 +140,10 @@ bool llamafile_sgemm(long m, long n, long k, const void *A, long lda, const void
 bool llamafile_mixmul(const ggml_compute_params *params, const ggml_tensor *weights,
                       const ggml_tensor *thought, const ggml_tensor *plan, ggml_tensor *result) {
     return funcs.mixmul(params, weights, thought, plan, result);
+}
+
+bool llamafile_mixmul_iqk(long Nx, long Ny, long ne00, int ne11, int typeA, const void *A,
+                          const void *B, float *C, long nb1, long nb2, const void *vrow_mapping,
+                          int ith, int nth) {
+    return funcs.iqk_mixmul(Nx, Ny, ne00, ne11, typeA, A, B, C, nb1, nb2, vrow_mapping, ith, nth);
 }

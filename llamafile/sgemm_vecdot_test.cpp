@@ -1,5 +1,5 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
 //
@@ -19,9 +19,9 @@
 #include "bench.h"
 #include "float.h"
 #include "llama.cpp/ggml.h"
-#include "llamafile.h"
 #include "macros.h"
 #include "numba.h"
+#include "sgemm.h"
 
 #define ITERATIONS 30
 #define ALLOC(n) (float *)memalign(4096, sizeof(float) * (n))

@@ -1,9 +1,10 @@
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
-// vi: set et ft=c++ ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 
 #include "common.h"
 #include "json.h"
 #include "json-schema-to-grammar.h"
+#include "llamafile/debug.h"
 #include "llama.h"
 
 #include <algorithm>
@@ -71,116 +72,9 @@
 #include <sys/syslimits.h>
 #endif
 #define LLAMA_CURL_MAX_URL_LENGTH 2084 // Maximum URL Length in Chrome: 2083
-#define LLAMA_CURL_MAX_HEADER_LENGTH 256
 #endif // LLAMA_USE_CURL
 
 using json = nlohmann::ordered_json;
-
-int32_t get_num_physical_cores() {
-    if (IsLinux()) {
-    // enumerate the set of thread siblings, num entries is num cores
-    std::unordered_set<std::string> siblings;
-    for (uint32_t cpu=0; cpu < UINT32_MAX; ++cpu) {
-        std::ifstream thread_siblings("/sys/devices/system/cpu"
-            + std::to_string(cpu) + "/topology/thread_siblings");
-        if (!thread_siblings.is_open()) {
-            break; // no more cpus
-        }
-        std::string line;
-        if (std::getline(thread_siblings, line)) {
-            siblings.insert(line);
-        }
-    }
-    if (!siblings.empty()) {
-        return static_cast<int32_t>(siblings.size());
-    }
-    }
-    int32_t num_physical_cores;
-    size_t len = sizeof(num_physical_cores);
-    int result = sysctlbyname("hw.perflevel0.physicalcpu", &num_physical_cores, &len, NULL, 0);
-    if (result == 0) {
-        return num_physical_cores;
-    }
-    result = sysctlbyname("hw.physicalcpu", &num_physical_cores, &len, NULL, 0);
-    if (result == 0) {
-        return num_physical_cores;
-    }
-    unsigned int n_threads = std::thread::hardware_concurrency();
-    return n_threads > 0 ? (n_threads <= 4 ? n_threads : n_threads / 2) : 4;
-}
-
-#if defined(__x86_64__) && (defined(__linux__) || defined(__COSMOPOLITAN__)) && !defined(__ANDROID__)
-#include <pthread.h>
-
-static void cpuid(unsigned leaf, unsigned subleaf,
-                  unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {
-    __asm__("movq\t%%rbx,%%rsi\n\t"
-            "cpuid\n\t"
-            "xchgq\t%%rbx,%%rsi"
-            : "=a"(*eax), "=S"(*ebx), "=c"(*ecx), "=d"(*edx)
-            : "0"(leaf), "2"(subleaf));
-}
-
-static int pin_cpu(int cpu) {
-    cpu_set_t mask;
-    CPU_ZERO(&mask);
-    CPU_SET(cpu, &mask);
-    return pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
-}
-
-static bool is_hybrid_cpu(void) {
-    unsigned eax, ebx, ecx, edx;
-    cpuid(7, 0, &eax, &ebx, &ecx, &edx);
-    return !!(edx & (1u << 15));
-}
-
-static bool is_running_on_efficiency_core(void) {
-    unsigned eax, ebx, ecx, edx;
-    cpuid(0x1a, 0, &eax, &ebx, &ecx, &edx);
-    int intel_atom = 0x20;
-    int core_type = (eax & 0xff000000u) >> 24;
-    return core_type == intel_atom;
-}
-
-static int count_math_cpus(int cpu_count) {
-    int result = 0;
-    for (int cpu = 0; cpu < cpu_count; ++cpu) {
-        if (pin_cpu(cpu)) {
-            return -1;
-        }
-        if (is_running_on_efficiency_core()) {
-            continue; // efficiency cores harm lockstep threading
-        }
-        ++cpu; // hyperthreading isn't useful for linear algebra
-        ++result;
-    }
-    return result;
-}
-
-#endif // __x86_64__ && __linux__
-
-/**
- * Returns number of CPUs on system that are useful for math.
- */
-int get_math_cpu_count() {
-#if defined(__x86_64__) && (defined(__linux__) || defined(__COSMOPOLITAN__)) && !defined(__ANDROID__)
-    int cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
-    if (cpu_count < 1) {
-        return get_num_physical_cores();
-    }
-    if (is_hybrid_cpu()) {
-        cpu_set_t affinity;
-        if (!pthread_getaffinity_np(pthread_self(), sizeof(affinity), &affinity)) {
-            int result = count_math_cpus(cpu_count);
-            pthread_setaffinity_np(pthread_self(), sizeof(affinity), &affinity);
-            if (result > 0) {
-                return result;
-            }
-        }
-    }
-#endif
-    return get_num_physical_cores();
-}
 
 void process_escapes(std::string & input) {
     std::size_t input_len = input.length();
@@ -291,12 +185,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
     }
     if (arg == "--fast") {
         FLAG_precise = false;
-        FLAG_precision_specified = true;
         return true;
     }
     if (arg == "--precise") {
         FLAG_precise = true;
-        FLAG_precision_specified = true;
         return true;
     }
     if (arg == "--trap") {
@@ -951,6 +843,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
         params.interactive = true;
         return true;
     }
+    if (arg == "--interactive-specials") {
+        params.interactive_specials = true;
+        return true;
+    }
     if (arg == "--embedding") {
         params.embedding = true;
         return true;
@@ -961,6 +857,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
     }
     if (arg == "-ins" || arg == "--instruct") {
         params.instruct = true;
+        return true;
+    }
+    if (arg == "-cnv" || arg == "--conversation") {
+        params.conversation = true;
         return true;
     }
     if (arg == "-cml" || arg == "--chatml") {
@@ -1081,6 +981,14 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
                 params.tensor_split[i] = 0.0f;
             }
         }
+        return true;
+    }
+    if (arg == "--rpc") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        params.rpc_servers = argv[i];
         return true;
     }
     if (arg == "--no-mmap") {
@@ -1369,7 +1277,12 @@ void gpt_params_handle_model_default(gpt_params & params) {
             }
             params.hf_file = params.model;
         } else if (params.model.empty()) {
-            params.model = "models/" + string_split(params.hf_file, '/').back();
+            std::string cache_directory = get_cache_directory();
+            const bool success = create_directory_with_parents(cache_directory);
+            if (!success) {
+                throw std::runtime_error("failed to create cache directory: " + cache_directory);
+            }
+            params.model = cache_directory + string_split(params.hf_file, '/').back();
         }
     } else if (!params.model_url.empty()) {
         if (params.model.empty()) {
@@ -1394,14 +1307,12 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
         if (arg.compare(0, arg_prefix.size(), arg_prefix) == 0) {
             std::replace(arg.begin(), arg.end(), '_', '-');
         }
-
         if (!gpt_params_find_arg(argc, argv, arg, params, i, invalid_param)) {
             throw std::invalid_argument("error: unknown argument: " + arg);
         }
-    }
-
-    if (invalid_param) {
-        throw std::invalid_argument("error: invalid parameter for argument: " + arg);
+        if (invalid_param) {
+            throw std::invalid_argument("error: invalid parameter for argument: " + arg);
+        }
     }
 
     if (params.prompt_cache_all &&
@@ -1451,7 +1362,9 @@ void gpt_print_usage(int /*argc*/, char ** argv, const gpt_params & params) {
     printf("  -h, --help            show this help message and exit\n");
     printf("  --version             show version and build info\n");
     printf("  -i, --interactive     run in interactive mode\n");
+    printf("  --interactive-specials allow special tokens in user text, in interactive mode\n");
     printf("  --interactive-first   run in interactive mode and wait for input right away\n");
+    printf("  -cnv, --conversation  run in conversation mode (does not print special tokens and suffix/prefix)\n");
     printf("  -ins, --instruct      run in instruction mode (use with Alpaca models)\n");
     printf("  -cml, --chatml        run in chatml mode (use with ChatML-compatible models)\n");
     printf("  --multiline-input     allows you to write or paste multiple lines without ending each in '\\'\n");
@@ -1855,6 +1768,7 @@ struct llama_model_params llama_model_params_from_gpt_params(const gpt_params & 
     if (params.n_gpu_layers != -1) {
         mparams.n_gpu_layers = params.n_gpu_layers;
     }
+    mparams.rpc_servers     = params.rpc_servers.c_str();
     mparams.main_gpu        = params.main_gpu;
     mparams.split_mode      = params.split_mode;
     mparams.tensor_split    = params.tensor_split;
@@ -1999,18 +1913,18 @@ static bool llama_download_file(const std::string & url, const std::string & pat
             try {
                 metadata_in >> metadata;
                 fprintf(stderr, "%s: previous metadata file found %s: %s\n", __func__, metadata_path.c_str(), metadata.dump().c_str());
-                if (metadata.contains("url") && metadata["url"].is_string()) {
-                    auto previous_url = metadata["url"].get<std::string>();
+                if (metadata.contains("url") && metadata.at("url").is_string()) {
+                    auto previous_url = metadata.at("url").get<std::string>();
                     if (previous_url != url) {
                         fprintf(stderr, "%s: Model URL mismatch: %s != %s\n", __func__, url.c_str(), previous_url.c_str());
                         return false;
                     }
                 }
-                if (metadata.contains("etag") && metadata["etag"].is_string()) {
-                    etag = metadata["etag"];
+                if (metadata.contains("etag") && metadata.at("etag").is_string()) {
+                    etag = metadata.at("etag");
                 }
-                if (metadata.contains("lastModified") && metadata["lastModified"].is_string()) {
-                    last_modified = metadata["lastModified"];
+                if (metadata.contains("lastModified") && metadata.at("lastModified").is_string()) {
+                    last_modified = metadata.at("lastModified");
                 }
             } catch (const nlohmann::json::exception & e) {
                 fprintf(stderr, "%s: error reading metadata file %s: %s\n", __func__, metadata_path.c_str(), e.what());
@@ -2531,6 +2445,31 @@ bool create_directory_with_parents(const std::string & path) {
 #endif // _WIN32
 }
 
+std::string get_cache_directory() {
+    std::string cache_directory = "";
+    if (getenv("LLAMA_CACHE")) {
+        cache_directory = std::getenv("LLAMA_CACHE");
+        if (cache_directory.back() != DIRECTORY_SEPARATOR) {
+            cache_directory += DIRECTORY_SEPARATOR;
+        }
+    } else {
+        if (IsLinux()) { // [jart]
+        if (std::getenv("XDG_CACHE_HOME")) {
+            cache_directory = std::getenv("XDG_CACHE_HOME");
+        } else {
+            cache_directory = std::getenv("HOME") + std::string("/.cache/");
+        }
+        } else if (IsXnu()) {
+        cache_directory = std::getenv("HOME") + std::string("/Library/Caches/");
+        } else if (IsWindows()) {
+        cache_directory = std::getenv("APPDATA");
+        }
+        cache_directory += "llama.cpp";
+        cache_directory += DIRECTORY_SEPARATOR;
+    }
+    return cache_directory;
+}
+
 void dump_vector_float_yaml(FILE * stream, const char * prop_name, const std::vector<float> & data) {
     if (data.empty()) {
         fprintf(stream, "%s:\n", prop_name);
@@ -2568,7 +2507,7 @@ void dump_string_yaml_multiline(FILE * stream, const char * prop_name, const cha
     size_t pos_start = 0;
     size_t pos_found = 0;
 
-    if (!data_str.empty() && (std::isspace(data_str[0]) || std::isspace(data_str.back()))) {
+    if (std::isspace(data_str[0]) || std::isspace(data_str.back())) {
         data_str = std::regex_replace(data_str, std::regex("\n"), "\\n");
         data_str = std::regex_replace(data_str, std::regex("\""), "\\\"");
         data_str = std::regex_replace(data_str, std::regex(R"(\\[^n"])"), R"(\$&)");
@@ -2680,6 +2619,7 @@ void dump_non_result_info_yaml(FILE * stream, const gpt_params & params, const l
     dump_string_yaml_multiline(stream, "in_suffix", params.input_prefix.c_str());
     fprintf(stream, "instruct: %s # default: false\n", params.instruct ? "true" : "false");
     fprintf(stream, "interactive: %s # default: false\n", params.interactive ? "true" : "false");
+    fprintf(stream, "interactive_specials: %s # default: false\n", params.interactive_specials ? "true" : "false");
     fprintf(stream, "interactive_first: %s # default: false\n", params.interactive_first ? "true" : "false");
     fprintf(stream, "keep: %d # default: 0\n", params.n_keep);
     fprintf(stream, "logdir: %s # default: unset (no logging)\n", params.logdir.c_str());

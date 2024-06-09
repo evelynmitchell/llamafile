@@ -2,10 +2,38 @@
 #define LLAMAFILE_H_
 #include <stdbool.h>
 #include <stdio.h>
-#include <threads.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+extern bool FLAG_log_disable;
+extern bool FLAG_mlock;
+extern bool FLAG_mmap;
+extern bool FLAG_nocompile;
+extern bool FLAG_precise;
+extern bool FLAG_recompile;
+extern bool FLAG_tinyblas;
+extern bool FLAG_trap;
+extern bool FLAG_unsecure;
+extern const char *FLAG_file;
+extern const char *FLAG_listen;
+extern const char *FLAG_model;
+extern const char *FLAG_prompt;
+extern float FLAG_temp;
+extern int FLAG_batch;
+extern int FLAG_ctx;
+extern int FLAG_flash_attn;
+extern int FLAG_gpu;
+extern int FLAG_gpu;
+extern int FLAG_keepalive;
+extern int FLAG_main_gpu;
+extern int FLAG_n_gpu_layers;
+extern int FLAG_seed;
+extern int FLAG_split_mode;
+extern int FLAG_threads;
+extern int FLAG_ubatch;
+extern int FLAG_verbose;
+extern int FLAG_workers;
 
 struct llamafile;
 struct llamafile *llamafile_open_gguf(const char *, const char *);
@@ -17,7 +45,11 @@ void *llamafile_content(struct llamafile *);
 size_t llamafile_tell(struct llamafile *);
 size_t llamafile_size(struct llamafile *);
 FILE *llamafile_fp(struct llamafile *);
+void llamafile_ref(struct llamafile *);
+void llamafile_unref(struct llamafile *);
+char *llamafile_get_prompt(void);
 
+void llamafile_govern(void);
 void llamafile_check_cpu(void);
 void llamafile_help(const char *);
 void llamafile_log_command(char *[]);
@@ -28,11 +60,7 @@ int llamafile_is_file_newer_than(const char *, const char *);
 void llamafile_schlep(const void *, size_t);
 void llamafile_get_app_dir(char *, size_t);
 void llamafile_launch_browser(const char *);
-
-extern bool FLAG_trap;
-extern bool FLAG_precise;
-extern bool FLAG_unsecure;
-extern bool FLAG_precision_specified;
+void llamafile_get_flags(int, char **);
 
 #define LLAMAFILE_GPU_ERROR -2
 #define LLAMAFILE_GPU_DISABLE -1
@@ -40,10 +68,6 @@ extern bool FLAG_precision_specified;
 #define LLAMAFILE_GPU_AMD 1
 #define LLAMAFILE_GPU_APPLE 2
 #define LLAMAFILE_GPU_NVIDIA 4
-extern int FLAG_gpu;
-extern bool FLAG_tinyblas;
-extern bool FLAG_nocompile;
-extern bool FLAG_recompile;
 bool llamafile_has_gpu(void);
 int llamafile_gpu_layers(int);
 bool llamafile_has_cuda(void);
@@ -51,26 +75,6 @@ bool llamafile_has_metal(void);
 bool llamafile_has_amd_gpu(void);
 int llamafile_gpu_parse(const char *);
 const char *llamafile_describe_gpu(void);
-
-bool llamafile_sgemm(long, long, long, const void *, long, const void *, long, void *, long, int,
-                     int, int, int, int, int, int);
-
-struct ggml_tensor;
-struct ggml_compute_params;
-bool llamafile_mixmul(const struct ggml_compute_params *, const struct ggml_tensor *,
-                      const struct ggml_tensor *, const struct ggml_tensor *, struct ggml_tensor *);
-size_t llamafile_mixmul_needs(const struct ggml_tensor *, const struct ggml_tensor *,
-                              const struct ggml_tensor *);
-
-struct StackFrame;
-struct ggml_cgraph;
-int feenableexcept(int);
-int fedisableexcept(int);
-int llamafile_trapping_enabled(int);
-void llamafile_trapping_restore(void);
-void ShowBacktrace(int, const struct StackFrame *);
-extern const struct ggml_cgraph *llamafile_debug_graph;
-extern thread_local int llamafile_debug_op_index;
 
 #ifdef __cplusplus
 }
