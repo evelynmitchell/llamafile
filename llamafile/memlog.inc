@@ -15,32 +15,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-#include <ctl/string_view.h>
+#include "crash.h"
+#include <cosmo.h>
+#include <stdlib.h>
+#include <third_party/dlmalloc/dlmalloc.h>
 
-char*
-encode_bool(char*, bool) noexcept;
+void *memlog(void *p) {
+    char bt[160];
+    struct StackFrame *sf;
+    sf = (struct StackFrame *)__builtin_frame_address(0);
+    describe_backtrace(bt, sizeof(bt), sf);
+    kprintf("alloc %p bt %s\n", p, bt);
+    return p;
+}
 
-char*
-encode_json(char*, int) noexcept;
+void *malloc(size_t n) {
+    return memlog(dlmalloc(n));
+}
 
-char*
-encode_json(char*, long) noexcept;
+void *calloc(size_t n, size_t z) {
+    return memlog(dlcalloc(n, z));
+}
 
-char*
-encode_json(char*, float) noexcept;
+void *realloc(void *p, size_t n) {
+    return memlog(dlrealloc(p, n));
+}
 
-char*
-encode_json(char*, double) noexcept;
-
-char*
-encode_json(char*, unsigned) noexcept;
-
-char*
-encode_json(char*, unsigned long) noexcept;
-
-char*
-encode_json(char*, const ctl::string_view) noexcept;
-
-char*
-encode_js_string_literal(char*, const ctl::string_view) noexcept;
+void *memalign(size_t a, size_t n) {
+    return memlog(dlmemalign(a, n));
+}

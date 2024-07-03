@@ -20,11 +20,28 @@
 #include "buffer.h"
 
 #include <ctl/optional.h>
-#include <ctl/string_view.h>
+#include <ctl/string.h>
+#include <libc/fmt/itoa.h>
+#include <libc/str/slice.h>
 #include <net/http/http.h>
 #include <net/http/url.h>
 #include <sys/resource.h>
 #include <time.h>
+
+#define HasHeader(H) (!!msg.headers[H].a)
+#define HeaderData(H) (ibuf.p + msg.headers[H].a)
+#define HeaderLength(H) (msg.headers[H].b - msg.headers[H].a)
+#define HeaderEqual(H, S) \
+    SlicesEqual(S, strlen(S), HeaderData(H), HeaderLength(H))
+#define HeaderEqualCase(H, S) \
+    SlicesEqualCase(S, strlen(S), HeaderData(H), HeaderLength(H))
+
+struct Cleanup
+{
+    Cleanup* next;
+    void (*func)(void*);
+    void* arg;
+};
 
 struct Client
 {
@@ -37,6 +54,7 @@ struct Client
     char* url_memory = nullptr;
     char* params_memory = nullptr;
     ctl::string_view payload;
+    Cleanup* cleanups;
     Buffer ibuf;
     Buffer obuf;
 
@@ -45,6 +63,7 @@ struct Client
     void run();
     int close();
     void clear();
+    void cleanup();
     bool transport() __wur;
     bool synchronize() __wur;
     bool read_payload() __wur;
@@ -52,6 +71,7 @@ struct Client
     bool read_content() __wur;
     bool send_continue() __wur;
     bool send(const ctl::string_view) __wur;
+    void defer_cleanup(void (*)(void*), void*);
     char* start_response(char*, int, const char* = nullptr);
     bool send_error(int, const char* = nullptr) __wur;
     bool send_response(char*, char*, const ctl::string_view) __wur;
@@ -64,4 +84,5 @@ struct Client
 
     bool dispatch() __wur;
     bool tokenize() __wur;
+    bool embedding() __wur;
 };

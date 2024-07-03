@@ -16,31 +16,31 @@
 // limitations under the License.
 
 #pragma once
-#include <ctl/string_view.h>
+#include <stdatomic.h>
 
-char*
-encode_bool(char*, bool) noexcept;
+template <typename T>
+class RefCounted {
+  public:
+    RefCounted() : refs_(ATOMIC_VAR_INIT(0)) {
+    }
 
-char*
-encode_json(char*, int) noexcept;
+    virtual ~RefCounted() {
+        if (atomic_load_explicit(&refs_, memory_order_relaxed) != -1)
+            __builtin_trap();
+    }
 
-char*
-encode_json(char*, long) noexcept;
+    T *ref() {
+        atomic_fetch_add_explicit(&refs_, 1, memory_order_relaxed);
+        return (T *)this;
+    }
 
-char*
-encode_json(char*, float) noexcept;
+    void unref() {
+        if (atomic_fetch_sub_explicit(&refs_, 1, memory_order_release))
+            return;
+        atomic_thread_fence(memory_order_acquire);
+        delete this;
+    }
 
-char*
-encode_json(char*, double) noexcept;
-
-char*
-encode_json(char*, unsigned) noexcept;
-
-char*
-encode_json(char*, unsigned long) noexcept;
-
-char*
-encode_json(char*, const ctl::string_view) noexcept;
-
-char*
-encode_js_string_literal(char*, const ctl::string_view) noexcept;
+  private:
+    atomic_int refs_;
+};

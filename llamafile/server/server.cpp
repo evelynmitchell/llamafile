@@ -26,6 +26,7 @@
 #include <time.h>
 
 #include "llamafile/llamafile.h"
+
 #include "log.h"
 #include "server.h"
 #include "worker.h"
@@ -59,9 +60,7 @@ Server::signal()
 void
 Server::wait()
 {
-    struct timespec waitfor =
-      timespec_add(timespec_real(), timespec_fromseconds(1));
-    pthread_cond_timedwait(&cond_, &lock_, &waitfor);
+    pthread_cond_wait(&cond_, &lock_);
 }
 
 void
@@ -162,7 +161,7 @@ Server::run()
         if (terminated.load(std::memory_order_acquire))
             break;
         int missing =
-          FLAG_threads - worker_count.load(std::memory_order_acquire);
+          FLAG_workers - worker_count.load(std::memory_order_acquire);
         for (int i = 0; i < missing; ++i)
             spawn();
     }

@@ -1,5 +1,5 @@
-// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
-// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
+// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
 //
@@ -15,10 +15,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "signals.h"
-#include "utils.h"
+#include "crash.h"
 
-#include <assert.h>
 #include <cosmo.h>
 #include <ucontext.h>
 
@@ -30,11 +28,18 @@
 #define BP gregs[REG_RBP]
 #endif
 
+char *hexcpy(char *p, unsigned long x) {
+    int k = x ? (__builtin_clzl(x) ^ 63) + 1 : 1;
+    k = (k + 3) & -4;
+    while (k > 0)
+        *p++ = "0123456789abcdef"[(x >> (k -= 4)) & 15];
+    *p = '\0';
+    return p;
+}
+
 // returns true if `p` is preceded by x86 call instruction
 // this is actually impossible to do but we'll do our best
-int
-is_call(const unsigned char* p)
-{
+int is_call(const unsigned char *p) {
     if (p[-5] == 0xe8)
         return 5; // call Jvds
     if (p[-2] == 0xff && (p[-1] & 070) == 020)
@@ -50,14 +55,16 @@ is_call(const unsigned char* p)
     return 0;
 }
 
-void
-describe_crash(char* buf, size_t len, int sig, siginfo_t* si, void* arg)
-{
-    unassert(len >= 64);
+//                         abashed the devil stood
+//                      and felt how awful goodness is
+char *describe_crash(char *buf, size_t len, int sig, siginfo_t *si, void *arg) {
+    char *p = buf;
+
+    // check minimum length
+    if (len < 64)
+        return p;
 
     // describe crash
-    char* p = buf;
-    char* pe = p + len;
     char signame[21];
     p = stpcpy(p, strsignal_r(sig, signame));
     if (si && //
@@ -71,24 +78,29 @@ describe_crash(char* buf, size_t len, int sig, siginfo_t* si, void* arg)
     }
 
     // get stack frame daisy chain
-    long pc;
-    ucontext_t* ctx;
-    struct StackFrame* sf;
-    if ((ctx = (ucontext_t*)arg)) {
-        pc = ctx->uc_mcontext.PC;
-        sf = (struct StackFrame*)ctx->uc_mcontext.BP;
+    struct StackFrame pc;
+    struct StackFrame *sf;
+    ucontext_t *ctx;
+    if ((ctx = (ucontext_t *)arg)) {
+        pc.addr = ctx->uc_mcontext.PC;
+        pc.next = (struct StackFrame *)ctx->uc_mcontext.BP;
+        sf = &pc;
     } else {
-        pc = 0;
-        sf = (struct StackFrame*)__builtin_frame_address(0);
+        sf = (struct StackFrame *)__builtin_frame_address(0);
     }
 
     // describe backtrace
     p = stpcpy(p, " bt ");
-    if (pc) {
-        p = hexcpy(p, pc);
-        *p++ = ' ';
-    }
+    p = describe_backtrace(p, len - (p - buf), sf);
+
+    return p;
+}
+
+char *describe_backtrace(char *p, size_t len, const struct StackFrame *sf) {
+    char *pe = p + len;
     bool gotsome = false;
+
+    // show address of each function
     while (sf) {
         if (kisdangerous(sf)) {
             if (p + 1 + 9 + 1 < pe) {
@@ -103,7 +115,7 @@ describe_crash(char* buf, size_t len, int sig, siginfo_t* si, void* arg)
             break;
         }
         if (p + 16 + 1 < pe) {
-            unsigned char* ip = (unsigned char*)sf->addr;
+            unsigned char *ip = (unsigned char *)sf->addr;
 #ifdef __x86_64__
             // x86 advances the progrem counter before an instruction
             // begins executing. return addresses in backtraces shall
@@ -124,5 +136,7 @@ describe_crash(char* buf, size_t len, int sig, siginfo_t* si, void* arg)
     }
 
     // terminate string
-    *p = '\0';
+    if (p < pe)
+        *p = '\0';
+    return p;
 }

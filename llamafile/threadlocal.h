@@ -16,31 +16,30 @@
 // limitations under the License.
 
 #pragma once
-#include <ctl/string_view.h>
+#include <pthread.h>
 
-char*
-encode_bool(char*, bool) noexcept;
+template <typename T>
+struct ThreadLocal {
 
-char*
-encode_json(char*, int) noexcept;
+    explicit ThreadLocal(void (*dtor)(T *value)) {
+        if (pthread_key_create(&key_, (void (*)(void *))dtor))
+            __builtin_trap();
+    }
 
-char*
-encode_json(char*, long) noexcept;
+    ~ThreadLocal() {
+        if (pthread_key_delete(key_))
+            __builtin_trap();
+    }
 
-char*
-encode_json(char*, float) noexcept;
+    void set(T *value) {
+        if (pthread_setspecific(key_, value))
+            __builtin_trap();
+    }
 
-char*
-encode_json(char*, double) noexcept;
+    T *get() {
+        return (T *)pthread_getspecific(key_);
+    }
 
-char*
-encode_json(char*, unsigned) noexcept;
-
-char*
-encode_json(char*, unsigned long) noexcept;
-
-char*
-encode_json(char*, const ctl::string_view) noexcept;
-
-char*
-encode_js_string_literal(char*, const ctl::string_view) noexcept;
+  private:
+    pthread_key_t key_;
+};

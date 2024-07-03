@@ -43,15 +43,17 @@ int FLAG_batch = 2048;
 int FLAG_ctx = 512;
 int FLAG_flash_attn = false;
 int FLAG_gpu = 0;
+int FLAG_http_ibuf_size = 1024 * 1024;
+int FLAG_http_obuf_size = 1024 * 1024;
 int FLAG_keepalive = 5;
 int FLAG_main_gpu = 0;
 int FLAG_n_gpu_layers = -1;
 int FLAG_seed = LLAMA_DEFAULT_SEED;
 int FLAG_split_mode = LLAMA_SPLIT_MODE_LAYER;
-int FLAG_threads = 64;
+int FLAG_threads;
 int FLAG_ubatch = 512;
 int FLAG_verbose = 0;
-int FLAG_workers = 0;
+int FLAG_workers;
 
 int cpu_get_num_math();
 
@@ -127,6 +129,23 @@ void llamafile_get_flags(int argc, char **argv) {
             if (i == argc)
                 missing("--workers");
             FLAG_workers = atoi(argv[i++]);
+            continue;
+        }
+
+        //////////////////////////////////////////////////////////////////////
+        // http server flags
+
+        if (!strcmp(flag, "--http-ibuf-size")) {
+            if (i == argc)
+                missing("--http-ibuf-size");
+            FLAG_http_ibuf_size = atoi(argv[i++]);
+            continue;
+        }
+
+        if (!strcmp(flag, "--http-obuf-size")) {
+            if (i == argc)
+                missing("--http-obuf-size");
+            FLAG_http_obuf_size = atoi(argv[i++]);
             continue;
         }
 

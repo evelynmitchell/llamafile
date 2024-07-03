@@ -15,15 +15,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "utils.h"
+#pragma once
+#include <pthread.h>
 
-char*
-hexcpy(char* p, unsigned long x)
-{
-    int k = x ? (__builtin_clzl(x) ^ 63) + 1 : 1;
-    k = (k + 3) & -4;
-    while (k > 0)
-        *p++ = "0123456789abcdef"[(x >> (k -= 4)) & 15];
-    *p = '\0';
-    return p;
-}
+class Lockable {
+  public:
+    Lockable() {
+        if (pthread_mutex_init(&lock_, nullptr))
+            __builtin_trap();
+    }
+
+    virtual ~Lockable() {
+        if (pthread_mutex_destroy(&lock_))
+            __builtin_trap();
+    }
+
+    void lock() {
+        if (pthread_mutex_lock(&lock_))
+            __builtin_trap();
+    }
+
+    void unlock() {
+        if (pthread_mutex_unlock(&lock_))
+            __builtin_trap();
+    }
+
+  private:
+    pthread_mutex_t lock_;
+};

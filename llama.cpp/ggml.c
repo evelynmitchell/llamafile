@@ -41,6 +41,7 @@ SOFTWARE.");
 #include "llamafile/log.h"
 #include "llamafile/debug.h"
 #include "llamafile/sgemm.h"
+#include "llamafile/thread.h"
 
 #include <alloca.h>
 #include <assert.h>
@@ -246,8 +247,6 @@ typedef double ggml_float;
 //
 // global data
 //
-
-float *ggml_table_gelu_f16;
 
 // precomputed f32 table for f16 (256 KB) (ggml-impl.h)
 float ggml_table_f32_f16[1 << 16];
@@ -1574,7 +1573,7 @@ int ggml_delay(int backoff) {
         }
         backoff++;
     } else {
-        sched_yield();
+        pthread_yield_np();
     }
     return backoff;
 }
@@ -1613,12 +1612,6 @@ struct ggml_context {
 
     struct ggml_scratch scratch;
     struct ggml_scratch scratch_save;
-};
-
-struct ggml_context_container {
-    bool used;
-
-    struct ggml_context context;
 };
 
 struct ggml_compute_state_shared {
@@ -1924,7 +1917,6 @@ struct ggml_numa_nodes {
 //
 
 struct ggml_state {
-    struct ggml_context_container contexts[GGML_MAX_CONTEXTS];
     struct ggml_numa_nodes numa;
 };
 
@@ -2359,148 +2351,104 @@ static inline int ggml_up(int n, int m) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct ggml_context * ggml_init(struct ggml_init_params params) {
-    // make this function thread safe
-    ggml_critical_section_start();
+static void ggml_init_once(void) {
     llamafile_trapping_enabled(-1);
 
     static bool is_first_call = true;
 
-    if (is_first_call) {
-        // initialize time system (required on Windows)
-        ggml_time_init();
+    // initialize time system (required on Windows)
+    ggml_time_init();
 
-        // initialize GELU, Quick GELU, SILU and EXP F32 tables
-        {
-            const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
+    // initialize GELU, Quick GELU, SILU and EXP F32 tables
+    {
+        const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
 
-            for (int i = 0; i < (1 << 16); ++i) {
-                union {
-                    uint16_t u16;
-                    ggml_fp16_t fp16;
-                } u = {i};
-                float f = ggml_table_f32_f16[i] = GGML_COMPUTE_FP16_TO_FP32(u.fp16);
-            }
-
-            const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
-
-            GGML_PRINT_DEBUG("%s: GELU, Quick GELU, SILU and EXP tables initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
+        for (int i = 0; i < (1 << 16); ++i) {
+            union {
+                uint16_t u16;
+                ggml_fp16_t fp16;
+            } u = {i};
+            float f = ggml_table_f32_f16[i] = GGML_COMPUTE_FP16_TO_FP32(u.fp16);
         }
 
-        // initialize g_state
-        {
-            const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
+        const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
 
-            g_state = (struct ggml_state) {
-                /*.contexts =*/ { { 0 } },
-                /*.numa =*/ {
-                    .n_nodes = 0,
-                    .total_cpus = 0,
-                },
-            };
+        GGML_PRINT_DEBUG("%s: GELU, Quick GELU, SILU and EXP tables initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
+    }
 
-            for (int i = 0; i < GGML_MAX_CONTEXTS; ++i) {
-                g_state.contexts[i].used = false;
-            }
+    // initialize g_state
+    {
+        const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
 
-            const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
+        g_state = (struct ggml_state) {
+            /*.numa =*/ {
+                .n_nodes = 0,
+                .total_cpus = 0,
+            },
+        };
 
-            GGML_PRINT_DEBUG("%s: g_state initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
-        }
+        const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
+
+        GGML_PRINT_DEBUG("%s: g_state initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
+    }
 
 #if defined(GGML_USE_CLBLAST)
-        ggml_cl_init();
+    ggml_cl_init();
 #endif
 
-        ggml_setup_op_has_task_pass();
+    ggml_setup_op_has_task_pass();
 
-        is_first_call = false;
-    }
+    llamafile_trapping_enabled(+1);
+}
 
-    // find non-used context in g_state
-    struct ggml_context * ctx = NULL;
+struct ggml_context * ggml_init(struct ggml_init_params params) {
 
-    for (int i = 0; i < GGML_MAX_CONTEXTS; i++) {
-        if (!g_state.contexts[i].used) {
-            g_state.contexts[i].used = true;
-            ctx = &g_state.contexts[i].context;
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    pthread_once(&once, ggml_init_once);
 
-            GGML_PRINT_DEBUG("%s: found unused context %d\n", __func__, i);
-            break;
-        }
-    }
-
-    if (ctx == NULL) {
-        GGML_PRINT_DEBUG("%s: no unused context found\n", __func__);
-
-        llamafile_trapping_enabled(+1);
-        ggml_critical_section_end();
-
+    struct ggml_context * ctx;
+    if (!(ctx = calloc(1, sizeof(struct ggml_context)))) {
+        GGML_PRINT("%s: failed to allocate ggml_context\n", __func__);
         return NULL;
     }
 
-    // allow to call ggml_init with 0 size
-    if (params.mem_size == 0) {
-        params.mem_size = GGML_MEM_ALIGN;
+    if (params.mem_buffer) {
+        ctx->mem_size = params.mem_size;
+        ctx->mem_buffer = params.mem_buffer;
+    } else {
+        if (params.mem_size) {
+            ctx->mem_size = GGML_PAD(params.mem_size, GGML_MEM_ALIGN);
+        } else {
+            ctx->mem_size = GGML_MEM_ALIGN;
+        }
+        ctx->mem_buffer_owned = true;
+        ctx->mem_buffer = GGML_ALIGNED_MALLOC(ctx->mem_size);
+        if (!ctx->mem_buffer) {
+            GGML_PRINT("%s: failed to allocate %zu bytes for ggml_context->mem_buffer\n",
+                       __func__, ctx->mem_size);
+            free(ctx);
+            return NULL;
+        }
     }
 
-    const size_t mem_size = params.mem_buffer ? params.mem_size : GGML_PAD(params.mem_size, GGML_MEM_ALIGN);
-
-    *ctx = (struct ggml_context) {
-        /*.mem_size           =*/ mem_size,
-        /*.mem_buffer         =*/ params.mem_buffer ? params.mem_buffer : GGML_ALIGNED_MALLOC(mem_size),
-        /*.mem_buffer_owned   =*/ params.mem_buffer ? false : true,
-        /*.no_alloc           =*/ params.no_alloc,
-        /*.no_alloc_save      =*/ params.no_alloc,
-        /*.n_objects          =*/ 0,
-        /*.objects_begin      =*/ NULL,
-        /*.objects_end        =*/ NULL,
-        /*.scratch            =*/ { 0, 0, NULL, },
-        /*.scratch_save       =*/ { 0, 0, NULL, },
-    };
-
-    GGML_ASSERT(ctx->mem_buffer != NULL);
+    ctx->no_alloc = params.no_alloc;
+    ctx->no_alloc_save = params.no_alloc;
 
     ggml_assert_aligned(ctx->mem_buffer);
 
     GGML_PRINT_DEBUG("%s: context initialized\n", __func__);
 
-    ggml_critical_section_end();
-
     return ctx;
 }
 
 void ggml_free(struct ggml_context * ctx) {
-    if (ctx == NULL) {
+    if (ctx == NULL)
         return;
-    }
-
-    // make this function thread safe
-    ggml_critical_section_start();
-
-    bool found = false;
-
-    for (int i = 0; i < GGML_MAX_CONTEXTS; i++) {
-        if (&g_state.contexts[i].context == ctx) {
-            g_state.contexts[i].used = false;
-
-            GGML_PRINT_DEBUG("%s: context %d has been freed. memory used = %zu\n",
-                    __func__, i, ggml_used_mem(ctx));
-
-            if (ctx->mem_buffer_owned) {
-                GGML_ALIGNED_FREE(ctx->mem_buffer);
-            }
-
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        GGML_PRINT_DEBUG("%s: context not found\n", __func__);
-    }
-
-    ggml_critical_section_end();
+    GGML_PRINT_DEBUG("%s: context %d has been freed. memory used = %zu\n",
+                     __func__, i, ggml_used_mem(ctx));
+    if (ctx->mem_buffer_owned)
+        GGML_ALIGNED_FREE(ctx->mem_buffer);
+    free(ctx);
 }
 
 size_t ggml_used_mem(const struct ggml_context * ctx) {
@@ -6083,38 +6031,6 @@ void ggml_flash_attn_ext_set_prec(
     const int32_t prec_i32 = (int32_t) prec;
 
     ggml_set_op_params_i32(a, 2, prec_i32); // scale is on first pos, max_bias on second
-}
-
-// ggml_flash_ff
-
-struct ggml_tensor * ggml_flash_ff(
-        struct ggml_context * ctx,
-        struct ggml_tensor  * a,
-        struct ggml_tensor  * b0,
-        struct ggml_tensor  * b1,
-        struct ggml_tensor  * c0,
-        struct ggml_tensor  * c1) {
-    GGML_ASSERT(ggml_can_mul_mat(b0, a));
-    // TODO: more checks
-
-    bool is_node = false;
-
-    if (a->grad || b0->grad || b1->grad || c0->grad || c1->grad) {
-        is_node = true;
-    }
-
-    //struct ggml_tensor * result = ggml_dup_tensor(ctx, a);
-    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, GGML_MAX_DIMS, a->ne);
-
-    result->op   = GGML_OP_FLASH_FF;
-    result->grad = is_node ? ggml_dup_tensor(ctx, result) : NULL;
-    result->src[0] = a;
-    result->src[1] = b0;
-    result->src[2] = b1;
-    result->src[3] = c0;
-    result->src[4] = c1;
-
-    return result;
 }
 
 // ggml_flash_attn_back
@@ -15322,165 +15238,6 @@ static void ggml_compute_forward_flash_attn_ext(
     }
 }
 
-// ggml_compute_forward_flash_ff
-
-static void ggml_compute_forward_flash_ff_f16(
-        const struct ggml_compute_params * params,
-        struct ggml_tensor * dst) {
-
-    const struct ggml_tensor * a = dst->src[0];  // F16
-    const struct ggml_tensor * b0 = dst->src[1]; // F16 fc_w
-    const struct ggml_tensor * b1 = dst->src[2]; // F32 fc_b
-    const struct ggml_tensor * c0 = dst->src[3]; // F16 proj_w
-    const struct ggml_tensor * c1 = dst->src[4]; // F32 proj_b
-
-    int64_t t0 = ggml_perf_time_us();
-    UNUSED(t0);
-
-    GGML_TENSOR_LOCALS(int64_t, nea,  a,   ne)
-    GGML_TENSOR_LOCALS(size_t,  nba,  a,   nb)
-    GGML_TENSOR_LOCALS(int64_t, neb0, b0,  ne)
-    GGML_TENSOR_LOCALS(size_t,  nbb0, b0,  nb)
-    GGML_TENSOR_LOCALS(int64_t, neb1, b1,  ne)
-    GGML_TENSOR_LOCALS(size_t,  nbb1, b1,  nb)
-    GGML_TENSOR_LOCALS(int64_t, nec0, c0,  ne)
-    GGML_TENSOR_LOCALS(size_t,  nbc0, c0,  nb)
-    GGML_TENSOR_LOCALS(int64_t, nec1, c1,  ne)
-    GGML_TENSOR_LOCALS(size_t,  nbc1, c1,  nb)
-    GGML_TENSOR_LOCALS(int64_t, ne,   dst, ne)
-    GGML_TENSOR_LOCALS(size_t,  nb,   dst, nb)
-
-    const int ith = params->ith;
-    const int nth = params->nth;
-
-    const int64_t D = nea0;
-    //const int64_t N = nea1;
-    const int64_t M = neb01;
-
-    GGML_ASSERT(ne0 == nea0);
-    GGML_ASSERT(ne1 == nea1);
-    GGML_ASSERT(ne2 == nea2);
-
-    GGML_ASSERT(nba0  == sizeof(ggml_fp16_t));
-    GGML_ASSERT(nbb00 == sizeof(ggml_fp16_t));
-    GGML_ASSERT(nbb10 == sizeof(float));
-    GGML_ASSERT(nbc00 == sizeof(ggml_fp16_t));
-    GGML_ASSERT(nbc10 == sizeof(float));
-
-    GGML_ASSERT(neb00 == D);
-    GGML_ASSERT(neb01 == M);
-    GGML_ASSERT(neb10 == M);
-    GGML_ASSERT(neb11 == 1);
-
-    GGML_ASSERT(nec00 == M);
-    GGML_ASSERT(nec01 == D);
-    GGML_ASSERT(nec10 == D);
-    GGML_ASSERT(nec11 == 1);
-
-    // dst cannot be transposed or permuted
-    GGML_ASSERT(nb0 == sizeof(float));
-    GGML_ASSERT(nb0 <= nb1);
-    GGML_ASSERT(nb1 <= nb2);
-    GGML_ASSERT(nb2 <= nb3);
-
-    if (params->type == GGML_TASK_TYPE_INIT) {
-        return;
-    }
-
-    if (params->type == GGML_TASK_TYPE_FINALIZE) {
-        return;
-    }
-
-    // parallelize by a rows using ggml_vec_dot_f32
-
-    // total rows in a
-    const int nr = nea1*nea2*nea3;
-
-    // rows per thread
-    const int dr = (nr + nth - 1)/nth;
-
-    // row range for this thread
-    const int ir0 = dr*ith;
-    const int ir1 = MIN(ir0 + dr, nr);
-
-    for (int ir = ir0; ir < ir1; ++ir) {
-        // a indices
-        const int ia3 = ir/(nea2*nea1);
-        const int ia2 = (ir - ia3*nea2*nea1)/nea1;
-        const int ia1 = (ir - ia3*nea2*nea1 - ia2*nea1);
-
-        float * S = (float *) params->wdata + ith*(2*M + CACHE_LINE_SIZE_F32);
-
-        for (int64_t ic = 0; ic < neb01; ++ic) {
-            // b0 indices
-            const int ib03 = ia3;
-            const int ib02 = ia2;
-            const int ib01 = ic;
-
-            // S indices
-            const int i1 = ib01;
-
-            ggml_vec_dot_f16(nea0,
-                    S + i1, 0,
-                    (ggml_fp16_t *) ((char *) b0->data + (ib01*nbb01 + ib02*nbb02 + ib03*nbb03)), 0,
-                    (ggml_fp16_t *) ((char *)  a->data + ( ia1*nba1  +  ia2*nba2  +  ia3*nba3)), 0, 1);
-        }
-
-        ggml_vec_add_f32(neb01, S, S, (float *) b1->data);
-        //ggml_vec_gelu_f32(neb01, S, S);
-
-        ggml_fp16_t * S16 = (ggml_fp16_t *) ((float *) params->wdata + ith*(2*M + CACHE_LINE_SIZE_F32) + M);
-
-        for (int64_t i = 0; i < M; i++) {
-            S16[i] = GGML_FP32_TO_FP16(S[i]);
-        }
-
-        ggml_vec_gelu_f16(neb01, S16, S16);
-
-        {
-            // dst indices
-            const int i1 = ia1;
-            const int i2 = ia2;
-            const int i3 = ia3;
-
-            for (int64_t ic = 0; ic < nec01; ++ic) {
-
-                ggml_vec_dot_f16(neb01,
-                        (float *)       ((char *) dst->data + (ic*nb0 + i1*nb1   + i2*nb2   + i3*nb3)), 0,
-                        (ggml_fp16_t *) ((char *) c0->data  + (         ic*nbc01 + i2*nbc02 + i3*nbc03)), 0,
-                        S16, 0, 1);
-            }
-
-            ggml_vec_add_f32(nec01,
-                    (float *) ((char *) dst->data + (i1*nb1 + i2*nb2 + i3*nb3)),
-                    (float *) ((char *) dst->data + (i1*nb1 + i2*nb2 + i3*nb3)),
-                    (float *) c1->data);
-        }
-    }
-}
-
-static void ggml_compute_forward_flash_ff(
-        const struct ggml_compute_params * params,
-        struct ggml_tensor * dst) {
-
-    const struct ggml_tensor * b0 = dst->src[1];
-
-    switch (b0->type) {
-        case GGML_TYPE_F16:
-            {
-                ggml_compute_forward_flash_ff_f16(params, dst);
-            } break;
-        case GGML_TYPE_F32:
-            {
-                GGML_ASSERT(false); // TODO
-            } break;
-        default:
-            {
-                GGML_ASSERT(false);
-            } break;
-    }
-}
-
 // ggml_compute_forward_flash_attn_back
 
 static void ggml_compute_forward_flash_attn_back_f32(
@@ -17072,10 +16829,6 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_flash_attn_ext(params, tensor->src[0], tensor->src[1], tensor->src[2], tensor->src[3], tensor);
             } break;
-        case GGML_OP_FLASH_FF:
-            {
-                ggml_compute_forward_flash_ff(params, tensor);
-            } break;
         case GGML_OP_FLASH_ATTN_BACK:
             {
                 int32_t t = ggml_get_op_params_i32(tensor, 0);
@@ -18145,10 +17898,6 @@ static void ggml_compute_backward(struct ggml_context * ctx, struct ggml_tensor 
                             zero_table);
                 }
             } break;
-        case GGML_OP_FLASH_FF:
-            {
-                GGML_ASSERT(false); // not supported
-            } break;
         case GGML_OP_FLASH_ATTN_BACK:
             {
                 GGML_ASSERT(false); // not supported
@@ -18561,7 +18310,7 @@ typedef int ggml_lock_t;
 
 typedef pthread_t ggml_thread_t;
 
-#define ggml_thread_create pthread_create
+#define ggml_thread_create llamafile_thread_create // [jart]
 #define ggml_thread_join   pthread_join
 
 #else
@@ -18841,10 +18590,6 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads, int n_cur_
             {
                 n_tasks = n_threads;
             } break;
-        case GGML_OP_FLASH_FF:
-            {
-                n_tasks = n_threads;
-            } break;
         case GGML_OP_FLASH_ATTN_BACK:
             {
                 n_tasks = n_threads;
@@ -18975,8 +18720,6 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
     }
 #endif
 
-    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0);
-
 #ifdef LLAMAFILE_SYNC_REPORT
     g_sync.stamp = rdtsc();
     unsigned long old = 0;
@@ -18986,10 +18729,15 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
                                             memory_order_relaxed);
 #endif
 
+    int ct; // [jart] enable instant math cancelation
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &ct);
+    pthread_testcancel();
+
     while (true) {
         if (cplan->abort_callback && cplan->abort_callback(cplan->abort_callback_data)) {
             state->shared->node_n += 1;
             state->ec = GGML_STATUS_ABORTED;
+            pthread_setcanceltype(ct, 0); // [jart]
             return 0;
         }
 
@@ -19125,6 +18873,8 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             ggml_graph_compute_thread_sync_task(&task_phase, state, false);
         }
     }
+
+    pthread_setcanceltype(ct, 0); // [jart]
 
 #ifdef LLAMAFILE_SYNC_REPORT
     g_sync.work_cycles += rdtsc() - g_sync.stamp;
@@ -19295,19 +19045,6 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
 
                     cur = 3*sizeof(float)*ne00*n_tasks; // 3x head size/thread
                 } break;
-            case GGML_OP_FLASH_FF:
-                {
-                    if (node->src[1]->type == GGML_TYPE_F32) {
-                        cur  = sizeof(float)*node->src[1]->ne[1]*n_tasks; // TODO: this can become (n_tasks-1)
-                        cur += sizeof(float)*node->src[1]->ne[1]*n_tasks; // this is overestimated by x2
-                    } else if (node->src[1]->type == GGML_TYPE_F16) {
-                        cur  = sizeof(float)*node->src[1]->ne[1]*n_tasks; // TODO: this can become (n_tasks-1)
-                        cur += sizeof(float)*node->src[1]->ne[1]*n_tasks; // this is overestimated by x2
-                    } else if (node->src[1]->type == GGML_TYPE_BF16) {
-                        cur  = sizeof(float)*node->src[1]->ne[1]*n_tasks; // TODO: this can become (n_tasks-1)
-                        cur += sizeof(float)*node->src[1]->ne[1]*n_tasks; // this is overestimated by x2
-                    }
-                } break;
             case GGML_OP_FLASH_ATTN_BACK:
                 {
                     const int64_t    D = node->src[0]->ne[0];
@@ -19399,6 +19136,10 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
             GGML_ASSERT(cplan->work_data);
         }
     }
+
+    // if we've been canceled then must
+    // die before launching the threads
+    pthread_testcancel(); // [jart]
 
 #ifdef LLAMAFILE_SYNC_REPORT
     fprintf(stderr, "\n");
